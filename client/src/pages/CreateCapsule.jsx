@@ -1,9 +1,19 @@
 import { useEffect, useState } from "react";
 import { fetchInterviewers } from "../services/userService";
-import { createCapsule, fetchMyCapsules } from "../services/capsuleService";
+import { createCapsule, fetchMyCapsules, deleteCapsule } from "../services/capsuleService";
 import LocationPickerMap from "../components/LocationPickerMap";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 function CreateCapsule() {
+    const { logout } = useAuth();
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        logout();
+        navigate("/login");
+    };
+
     const [interviewers, setInterviewers] = useState([]);
     const [capsules, setCapsules] = useState([]);
     const [form, setForm] = useState({
@@ -90,8 +100,27 @@ function CreateCapsule() {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!window.confirm("Are you sure you want to delete this capsule? This action cannot be undone.")) return;
+
+        setStatus("");
+        setError("");
+
+        try {
+            await deleteCapsule(id);
+            setStatus("Capsule deleted successfully");
+            const updated = await fetchMyCapsules();
+            setCapsules(updated);
+        } catch (err) {
+            setError(err.response?.data?.message || "Failed to delete capsule");
+        }
+    };
+
     return (
         <div style={{ padding: "2rem" }}>
+            <button onClick={handleLogout} style={{ marginBottom: "1rem" }}>
+                Logout
+            </button>
             <h2>Create Capsule</h2>
 
             <form onSubmit={handleSubmit} style={{ maxWidth: 500 }}>
@@ -191,7 +220,7 @@ function CreateCapsule() {
             <h3>My Capsules</h3>
             <ul>
                 {capsules.map((c) => (
-                    <li key={c._id} style={{ marginBottom: "0.5rem" }}>
+                    <li key={c._id} style={{ marginBottom: "1rem", border: "1px solid #ccc", padding: "10px", borderRadius: "5px" }}>
                         <div>
                             <strong>{c.title}</strong> → {c.receiverId?.name} ({c.receiverId?.email}) – status:{" "}
                             {c.status}
@@ -199,6 +228,12 @@ function CreateCapsule() {
                         <div>
                             Lat: {c.latitude}, Lng: {c.longitude}, Radius: {c.radiusMeters}m
                         </div>
+                        <button
+                            onClick={() => handleDelete(c._id)}
+                            style={{ marginTop: "10px", backgroundColor: "#ff4d4f", color: "white", border: "none", padding: "5px 10px", borderRadius: "3px", cursor: "pointer" }}
+                        >
+                            Delete Capsule
+                        </button>
                     </li>
                 ))}
             </ul>

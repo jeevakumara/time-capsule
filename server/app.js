@@ -1,19 +1,23 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+
+dotenv.config();
+
 const connectDB = require("./config/db");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const capsuleRoutes = require("./routes/capsuleRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
+const auditRoutes = require("./routes/auditRoutes");
 
-dotenv.config();
 connectDB();
 
 const app = express();
-
+app.use("/api/notifications", notificationRoutes);
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json());
-
+app.use("/api/audit-logs", auditRoutes);
 app.get("/api/health", (req, res) => {
     res.json({ success: true, message: "Time Capsule API is running" });
 });

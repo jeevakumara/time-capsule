@@ -6,6 +6,7 @@ const {
     listCapsulesBySender,
     listCapsulesAssignedToReceiver,
     unlockCapsule,
+    deleteCapsule,
 } = require("../controllers/capsuleController");
 
 const router = express.Router();
@@ -41,6 +42,14 @@ router.post(
     protect,
     authorize("interviewer"),
     unlockCapsule
+);
+
+// HR/Admin delete capsule
+router.delete(
+    "/:id",
+    protect,
+    authorize("hr", "admin"),
+    deleteCapsule
 );
 
 module.exports = router;

@@ -15,15 +15,38 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/admin" element={
-            <ProtectedRoute allowedRoles={["admin"]}><UserList /></ProtectedRoute>
-          } />
-          <Route path="/hr" element={
-            <ProtectedRoute allowedRoles={["hr", "admin"]}><CreateUser /><CreateCapsule /></ProtectedRoute>
-          } />
-          <Route path="/interviewer" element={
-            <ProtectedRoute allowedRoles={["interviewer"]}><h2>Interviewer Dashboard</h2><InterviewerCapsules /></ProtectedRoute>
-          } />
+
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <UserList />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/hr"
+            element={
+              <ProtectedRoute allowedRoles={["hr", "admin"]}>
+                <CreateUser />
+                <CreateCapsule />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/interviewer"
+            element={
+              <ProtectedRoute allowedRoles={["interviewer"]}>
+                <h2>Interviewer Dashboard</h2>
+                <InterviewerCapsules />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Optional default redirect */}
+          <Route path="*" element={<Login />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

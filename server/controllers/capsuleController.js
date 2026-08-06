@@ -3,7 +3,10 @@ const path = require("path");
 const Capsule = require("../models/Capsule");
 const { encryptFile, decryptFileToBuffer } = require("../utils/encryption");
 const { haversineDistanceMeters } = require("../utils/distance");
+const { sendCapsuleAssignedNotification } = require("../services/notificationService");
+const { addAuditLog } = require("../services/auditService");
 
+// HR / Admin: create a new capsule
 const createCapsule = async (req, res) => {
     try {
         const {
@@ -35,8 +38,9 @@ const createCapsule = async (req, res) => {
         const encryptedFileName = "enc-" + req.file.filename;
         const encryptedPath = path.join(path.dirname(originalPath), encryptedFileName);
 
+        // Encrypt and delete original
         await encryptFile(originalPath, encryptedPath);
-        fs.unlinkSync(originalPath); // remove plain file after encryption
+        fs.unlinkSync(originalPath);
 
         const capsule = await Capsule.create({
             title,
@@ -52,6 +56,18 @@ const createCapsule = async (req, res) => {
             expiryTime: expiryTime ? new Date(expiryTime) : undefined,
         });
 
+        // Audit: success
+        await addAuditLog({
+            userId: req.user._id,
+            capsuleId: capsule._id,
+            action: "CREATE_CAPSULE",
+            result: "SUCCESS",
+            reason: "Capsule created and encrypted successfully",
+        });
+
+        // Notify receiver (email + notification record)
+        await sendCapsuleAssignedNotification(capsule);
+
         res.status(201).json({
             success: true,
             message: "Capsule created successfully",
@@ -59,6 +75,20 @@ const createCapsule = async (req, res) => {
         });
     } catch (error) {
         console.error(error);
+
+        // Audit: failure (capsuleId may be null if creation failed early)
+        try {
+            await addAuditLog({
+                userId: req.user?._id,
+                capsuleId: null,
+                action: "CREATE_CAPSULE",
+                result: "FAILURE",
+                reason: error.message,
+            });
+        } catch (e) {
+            console.error("Error writing audit log for createCapsule:", e.message);
+        }
+
         res.status(500).json({
             success: false,
             message: "Server error while creating capsule",
@@ -67,6 +97,7 @@ const createCapsule = async (req, res) => {
     }
 };
 
+// HR / Admin: list capsules created by this user
 const listCapsulesBySender = async (req, res) => {
     try {
         const capsules = await Capsule.find({ senderId: req.user._id })
@@ -83,6 +114,7 @@ const listCapsulesBySender = async (req, res) => {
     }
 };
 
+// Interviewer: list capsules assigned to this receiver
 const listCapsulesAssignedToReceiver = async (req, res) => {
     try {
         const capsules = await Capsule.find({ receiverId: req.user._id }).sort({
@@ -98,7 +130,7 @@ const listCapsulesAssignedToReceiver = async (req, res) => {
     }
 };
 
-// Core secure unlock flow: identity + time + location + decryption
+// Interviewer: secure unlock (identity + time + location + decryption)
 const unlockCapsule = async (req, res) => {
     try {
         const { latitude, longitude } = req.body;
@@ -121,6 +153,14 @@ const unlockCapsule = async (req, res) => {
 
         // Layer 1: Identity check
         if (String(capsule.receiverId) !== String(req.user._id)) {
+            await addAuditLog({
+                userId: req.user._id,
+                capsuleId: capsule._id,
+                action: "UNLOCK_ATTEMPT",
+                result: "FAILURE",
+                reason: "User is not the intended receiver",
+            });
+
             return res.status(403).json({
                 success: false,
                 message: "You are not the intended receiver of this capsule",
@@ -128,6 +168,14 @@ const unlockCapsule = async (req, res) => {
         }
 
         if (capsule.status === "expired") {
+            await addAuditLog({
+                userId: req.user._id,
+                capsuleId: capsule._id,
+                action: "UNLOCK_ATTEMPT",
+                result: "FAILURE",
+                reason: "Capsule already expired",
+            });
+
             return res.status(403).json({
                 success: false,
                 message: "This capsule has expired",
@@ -136,15 +184,34 @@ const unlockCapsule = async (req, res) => {
 
         // Layer 2: Time check
         const now = new Date();
+
         if (now < capsule.unlockTime) {
+            await addAuditLog({
+                userId: req.user._id,
+                capsuleId: capsule._id,
+                action: "UNLOCK_ATTEMPT",
+                result: "FAILURE",
+                reason: "Unlock time not reached yet",
+            });
+
             return res.status(403).json({
                 success: false,
                 message: `Unlock time not reached yet. Unlocks at ${capsule.unlockTime.toISOString()}`,
             });
         }
+
         if (capsule.expiryTime && now > capsule.expiryTime) {
             capsule.status = "expired";
             await capsule.save();
+
+            await addAuditLog({
+                userId: req.user._id,
+                capsuleId: capsule._id,
+                action: "UNLOCK_ATTEMPT",
+                result: "FAILURE",
+                reason: "Capsule expired",
+            });
+
             return res.status(403).json({
                 success: false,
                 message: "This capsule has expired",
@@ -160,6 +227,14 @@ const unlockCapsule = async (req, res) => {
         );
 
         if (distance > capsule.radiusMeters) {
+            await addAuditLog({
+                userId: req.user._id,
+                capsuleId: capsule._id,
+                action: "UNLOCK_ATTEMPT",
+                result: "FAILURE",
+                reason: `Outside allowed radius. Distance=${Math.round(distance)}m`,
+            });
+
             return res.status(403).json({
                 success: false,
                 message: `You are outside the allowed location. Distance: ${Math.round(
@@ -170,6 +245,14 @@ const unlockCapsule = async (req, res) => {
 
         // All checks passed — decrypt the file
         if (!fs.existsSync(capsule.encryptedFilePath)) {
+            await addAuditLog({
+                userId: req.user._id,
+                capsuleId: capsule._id,
+                action: "UNLOCK_ATTEMPT",
+                result: "FAILURE",
+                reason: "Encrypted file missing on server",
+            });
+
             return res.status(500).json({
                 success: false,
                 message: "Encrypted file not found on server",
@@ -181,6 +264,14 @@ const unlockCapsule = async (req, res) => {
         capsule.status = "unlocked";
         await capsule.save();
 
+        await addAuditLog({
+            userId: req.user._id,
+            capsuleId: capsule._id,
+            action: "UNLOCK_ATTEMPT",
+            result: "SUCCESS",
+            reason: "All checks passed and file decrypted",
+        });
+
         res.set({
             "Content-Type": "application/pdf",
             "Content-Disposition": `inline; filename="${capsule.fileName}"`,
@@ -190,9 +281,77 @@ const unlockCapsule = async (req, res) => {
         return res.status(200).send(decryptedBuffer);
     } catch (error) {
         console.error(error);
+
+        try {
+            await addAuditLog({
+                userId: req.user?._id,
+                capsuleId: req.params?.id || null,
+                action: "UNLOCK_ATTEMPT",
+                result: "FAILURE",
+                reason: error.message,
+            });
+        } catch (e) {
+            console.error("Error writing audit log for unlockCapsule:", e.message);
+        }
+
         res.status(500).json({
             success: false,
             message: "Server error while unlocking capsule",
+            error: error.message,
+        });
+    }
+};
+
+// HR / Admin: delete a capsule
+const deleteCapsule = async (req, res) => {
+    try {
+        const capsuleId = req.params.id;
+        const capsule = await Capsule.findById(capsuleId);
+
+        if (!capsule) {
+            return res.status(404).json({
+                success: false,
+                message: "Capsule not found",
+            });
+        }
+
+        // Only sender or admin can delete
+        if (String(capsule.senderId) !== String(req.user._id) && req.user.role !== "admin") {
+            return res.status(403).json({
+                success: false,
+                message: "You are not authorized to delete this capsule",
+            });
+        }
+
+        // Delete encrypted file from file system
+        if (fs.existsSync(capsule.encryptedFilePath)) {
+            fs.unlinkSync(capsule.encryptedFilePath);
+        }
+
+        // Delete the capsule from DB
+        await Capsule.findByIdAndDelete(capsuleId);
+
+        // Also delete any notifications associated with this capsule to avoid orphaned data
+        const Notification = require("../models/Notification");
+        await Notification.deleteMany({ capsuleId: capsuleId });
+
+        await addAuditLog({
+            userId: req.user._id,
+            capsuleId: capsule._id,
+            action: "DELETE_CAPSULE",
+            result: "SUCCESS",
+            reason: "Capsule deleted successfully",
+        });
+
+        res.status(200).json({
+            success: true,
+            message: "Capsule deleted successfully",
+        });
+    } catch (error) {
+        console.error("Error deleting capsule:", error);
+        res.status(500).json({
+            success: false,
+            message: "Server error while deleting capsule",
             error: error.message,
         });
     }
@@ -203,4 +362,5 @@ module.exports = {
     listCapsulesBySender,
     listCapsulesAssignedToReceiver,
     unlockCapsule,
+    deleteCapsule,
 };

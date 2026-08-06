@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 function InterviewerCapsules() {
+    const { logout } = useAuth();
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        logout();
+        navigate("/login");
+    };
+
     const [capsules, setCapsules] = useState([]);
     const [status, setStatus] = useState("");
     const [error, setError] = useState("");
@@ -73,6 +83,9 @@ function InterviewerCapsules() {
 
     return (
         <div style={{ padding: "2rem" }}>
+            <button onClick={handleLogout} style={{ marginBottom: "1rem" }}>
+                Logout
+            </button>
             <h2>My Assigned Capsules</h2>
 
             {error && <p style={{ color: "red" }}>{error}</p>}

@@ -17,3 +17,8 @@ export const fetchMyCapsules = async () => {
     const res = await api.get("/capsules/my");
     return res.data.capsules;
 };
+
+export const deleteCapsule = async (id) => {
+    const res = await api.delete(`/capsules/${id}`);
+    return res.data;
+};

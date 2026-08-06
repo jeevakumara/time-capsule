@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 function UserList() {
+    const { logout } = useAuth();
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        logout();
+        navigate("/login");
+    };
+
     const [users, setUsers] = useState([]);
 
     useEffect(() => {
@@ -10,6 +20,9 @@ function UserList() {
 
     return (
         <div style={{ padding: "2rem" }}>
+            <button onClick={handleLogout} style={{ marginBottom: "1rem" }}>
+                Logout
+            </button>
             <h2>Registered Users</h2>
             <table border="1" cellPadding="8" style={{ borderCollapse: "collapse", width: "100%" }}>
                 <thead>
