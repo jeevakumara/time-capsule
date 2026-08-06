@@ -1,8 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const Capsule = require("../models/Capsule");
-const { encryptFile } = require("../utils/encryption");
-
+const { encryptFile, decryptFileToBuffer } = require("../utils/encryption");
 const { haversineDistanceMeters } = require("../utils/distance");
 
 const createCapsule = async (req, res) => {
@@ -36,16 +35,8 @@ const createCapsule = async (req, res) => {
         const encryptedFileName = "enc-" + req.file.filename;
         const encryptedPath = path.join(path.dirname(originalPath), encryptedFileName);
 
-        await new Promise((resolve, reject) => {
-            try {
-                encryptFile(originalPath, encryptedPath);
-                resolve();
-            } catch (err) {
-                reject(err);
-            }
-        });
-
-        fs.unlinkSync(originalPath); // delete plain file
+        await encryptFile(originalPath, encryptedPath);
+        fs.unlinkSync(originalPath); // remove plain file after encryption
 
         const capsule = await Capsule.create({
             title,
@@ -91,10 +82,12 @@ const listCapsulesBySender = async (req, res) => {
         });
     }
 };
+
 const listCapsulesAssignedToReceiver = async (req, res) => {
     try {
-        const capsules = await Capsule.find({ receiverId: req.user._id })
-            .sort({ createdAt: -1 });
+        const capsules = await Capsule.find({ receiverId: req.user._id }).sort({
+            createdAt: -1,
+        });
         res.status(200).json({ success: true, capsules });
     } catch (error) {
         res.status(500).json({
@@ -104,12 +97,14 @@ const listCapsulesAssignedToReceiver = async (req, res) => {
         });
     }
 };
+
+// Core secure unlock flow: identity + time + location + decryption
 const unlockCapsule = async (req, res) => {
     try {
         const { latitude, longitude } = req.body;
         const capsuleId = req.params.id;
 
-        if (!latitude || !longitude) {
+        if (latitude === undefined || longitude === undefined) {
             return res.status(400).json({
                 success: false,
                 message: "Latitude and longitude are required",
@@ -124,30 +119,39 @@ const unlockCapsule = async (req, res) => {
             });
         }
 
-        // Identity check
+        // Layer 1: Identity check
         if (String(capsule.receiverId) !== String(req.user._id)) {
             return res.status(403).json({
                 success: false,
-                message: "You are not the intended receiver",
+                message: "You are not the intended receiver of this capsule",
             });
         }
 
-        // Time check
+        if (capsule.status === "expired") {
+            return res.status(403).json({
+                success: false,
+                message: "This capsule has expired",
+            });
+        }
+
+        // Layer 2: Time check
         const now = new Date();
         if (now < capsule.unlockTime) {
             return res.status(403).json({
                 success: false,
-                message: "Unlock time has not been reached yet",
+                message: `Unlock time not reached yet. Unlocks at ${capsule.unlockTime.toISOString()}`,
             });
         }
         if (capsule.expiryTime && now > capsule.expiryTime) {
+            capsule.status = "expired";
+            await capsule.save();
             return res.status(403).json({
                 success: false,
-                message: "Capsule has expired",
+                message: "This capsule has expired",
             });
         }
 
-        // Location check
+        // Layer 3: Location check
         const distance = haversineDistanceMeters(
             capsule.latitude,
             capsule.longitude,
@@ -158,19 +162,34 @@ const unlockCapsule = async (req, res) => {
         if (distance > capsule.radiusMeters) {
             return res.status(403).json({
                 success: false,
-                message: `You are outside the allowed location. Distance: ${Math.round(distance)}m`,
+                message: `You are outside the allowed location. Distance: ${Math.round(
+                    distance
+                )}m (allowed: ${capsule.radiusMeters}m)`,
             });
         }
 
-        // For Phase 4, just mark unlocked (decryption will be handled in the next phase)
+        // All checks passed — decrypt the file
+        if (!fs.existsSync(capsule.encryptedFilePath)) {
+            return res.status(500).json({
+                success: false,
+                message: "Encrypted file not found on server",
+            });
+        }
+
+        const decryptedBuffer = await decryptFileToBuffer(capsule.encryptedFilePath);
+
         capsule.status = "unlocked";
         await capsule.save();
 
-        res.status(200).json({
-            success: true,
-            message: "Capsule unlocked successfully. (File viewing will be implemented in the next phase.)",
+        res.set({
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `inline; filename="${capsule.fileName}"`,
+            "Content-Length": decryptedBuffer.length,
         });
+
+        return res.status(200).send(decryptedBuffer);
     } catch (error) {
+        console.error(error);
         res.status(500).json({
             success: false,
             message: "Server error while unlocking capsule",
