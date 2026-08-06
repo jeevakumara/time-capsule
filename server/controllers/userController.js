@@ -1,0 +1,89 @@
+const bcrypt = require("bcrypt");
+const crypto = require("crypto");
+const User = require("../models/User");
+
+const generateTempPassword = () => crypto.randomBytes(4).toString("hex");
+
+const createUser = async (req, res) => {
+    try {
+        const { name, email, employeeId, role } = req.body;
+
+        if (!name || !email || !role) {
+            return res.status(400).json({ success: false, message: "Name, email, and role are required" });
+        }
+
+        const existing = await User.findOne({ email: email.toLowerCase() });
+        if (existing) {
+            return res.status(409).json({ success: false, message: "Email already registered" });
+        }
+
+        const tempPassword = generateTempPassword();
+        const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+        const user = await User.create({
+            name,
+            email: email.toLowerCase(),
+            employeeId,
+            role,
+            passwordHash,
+        });
+
+        res.status(201).json({
+            success: true,
+            message: "User created successfully",
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            },
+            tempPassword,
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+};
+
+const listUsers = async (req, res) => {
+    try {
+        const filter = {};
+        if (req.query.role) filter.role = req.query.role;
+
+        const users = await User.find(filter).select("-passwordHash");
+        res.status(200).json({ success: true, users });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+};
+
+const getUserById = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id).select("-passwordHash");
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        res.status(200).json({ success: true, user });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+};
+
+const updateUserStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        const user = await User.findByIdAndUpdate(
+            req.params.id,
+            { status },
+            { new: true }
+        ).select("-passwordHash");
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        res.status(200).json({ success: true, user });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+};
+
+module.exports = { createUser, listUsers, getUserById, updateUserStatus };

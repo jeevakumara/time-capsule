@@ -1,21 +1,30 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Login from "./pages/Login";
+import UserList from "./pages/UserList";
+import CreateUser from "./pages/CreateUser";
 
 function App() {
-  const [message, setMessage] = useState("Loading...");
-
-  useEffect(() => {
-    axios.get("http://localhost:5000/api/health")
-      .then((res) => setMessage(res.data.message))
-      .catch(() => setMessage("Backend not reachable"));
-  }, []);
-
   return (
-    <div style={{ padding: "2rem", fontFamily: "Arial" }}>
-      <h1>Time Capsule</h1>
-      <p>{message}</p>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/admin" element={
+            <ProtectedRoute allowedRoles={["admin"]}><UserList /></ProtectedRoute>
+          } />
+          <Route path="/hr" element={
+            <ProtectedRoute allowedRoles={["hr", "admin"]}><CreateUser /></ProtectedRoute>
+          } />
+          <Route path="/interviewer" element={
+            <ProtectedRoute allowedRoles={["interviewer"]}><h2>Interviewer Dashboard</h2></ProtectedRoute>
+          } />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }
-
 export default App;
