@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import UserList from "./pages/UserList";
 import CreateUser from "./pages/CreateUser";
 import CreateCapsule from "./pages/CreateCapsule";
+import InterviewerCapsules from "./pages/InterviewerCapsules";
 
 function App() {
   return (
@@ -21,7 +22,7 @@ function App() {
             <ProtectedRoute allowedRoles={["hr", "admin"]}><CreateUser /><CreateCapsule /></ProtectedRoute>
           } />
           <Route path="/interviewer" element={
-            <ProtectedRoute allowedRoles={["interviewer"]}><h2>Interviewer Dashboard</h2></ProtectedRoute>
+            <ProtectedRoute allowedRoles={["interviewer"]}><h2>Interviewer Dashboard</h2><InterviewerCapsules /></ProtectedRoute>
           } />
         </Routes>
       </BrowserRouter>

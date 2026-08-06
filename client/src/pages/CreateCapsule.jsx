@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchInterviewers } from "../services/userService";
 import { createCapsule, fetchMyCapsules } from "../services/capsuleService";
+import LocationPickerMap from "../components/LocationPickerMap";
 
 function CreateCapsule() {
     const [interviewers, setInterviewers] = useState([]);
@@ -9,8 +10,8 @@ function CreateCapsule() {
         title: "",
         description: "",
         receiverId: "",
-        latitude: "",
-        longitude: "",
+        latitude: null,
+        longitude: null,
         radiusMeters: 100,
         unlockTime: "",
         expiryTime: "",
@@ -20,8 +21,19 @@ function CreateCapsule() {
     const [error, setError] = useState("");
 
     useEffect(() => {
-        fetchInterviewers().then(setInterviewers).catch(console.error);
-        fetchMyCapsules().then(setCapsules).catch(console.error);
+        const loadData = async () => {
+            try {
+                const interviewerList = await fetchInterviewers();
+                setInterviewers(interviewerList);
+
+                const myCapsules = await fetchMyCapsules();
+                setCapsules(myCapsules);
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        loadData();
     }, []);
 
     const handleChange = (field, value) => {
@@ -32,10 +44,30 @@ function CreateCapsule() {
         handleChange("file", e.target.files[0]);
     };
 
+    const handleMapChange = ({ latitude, longitude }) => {
+        handleChange("latitude", latitude);
+        handleChange("longitude", longitude);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setStatus("");
         setError("");
+
+        if (!form.receiverId) {
+            setError("Please select an interviewer");
+            return;
+        }
+
+        if (form.latitude == null || form.longitude == null) {
+            setError("Please select a location on the map");
+            return;
+        }
+
+        if (!form.file) {
+            setError("Please upload a PDF file");
+            return;
+        }
 
         try {
             await createCapsule({
@@ -61,6 +93,7 @@ function CreateCapsule() {
     return (
         <div style={{ padding: "2rem" }}>
             <h2>Create Capsule</h2>
+
             <form onSubmit={handleSubmit} style={{ maxWidth: 500 }}>
                 <input
                     placeholder="Title"
@@ -69,12 +102,14 @@ function CreateCapsule() {
                     required
                     style={{ display: "block", width: "100%", marginBottom: 10 }}
                 />
+
                 <textarea
                     placeholder="Description"
                     value={form.description}
                     onChange={(e) => handleChange("description", e.target.value)}
                     style={{ display: "block", width: "100%", marginBottom: 10 }}
                 />
+
                 <select
                     value={form.receiverId}
                     onChange={(e) => handleChange("receiverId", e.target.value)}
@@ -82,30 +117,37 @@ function CreateCapsule() {
                     style={{ display: "block", width: "100%", marginBottom: 10 }}
                 >
                     <option value="">Select Interviewer</option>
-                    {interviewers.map((u) => (
-                        <option key={u._id} value={u._id}>
-                            {u.name} ({u.email})
+                    {Array.isArray(interviewers) && interviewers.length > 0 ? (
+                        interviewers.map((u) => (
+                            <option key={u._id} value={u._id}>
+                                {u.name} ({u.email})
+                            </option>
+                        ))
+                    ) : (
+                        <option value="" disabled>
+                            No interviewers available
                         </option>
-                    ))}
+                    )}
                 </select>
-                <input
-                    type="number"
-                    step="0.000001"
-                    placeholder="Latitude"
-                    value={form.latitude}
-                    onChange={(e) => handleChange("latitude", e.target.value)}
-                    required
-                    style={{ display: "block", width: "100%", marginBottom: 10 }}
+
+                <LocationPickerMap
+                    latitude={form.latitude}
+                    longitude={form.longitude}
+                    radiusMeters={form.radiusMeters}
+                    onChange={handleMapChange}
                 />
-                <input
-                    type="number"
-                    step="0.000001"
-                    placeholder="Longitude"
-                    value={form.longitude}
-                    onChange={(e) => handleChange("longitude", e.target.value)}
-                    required
-                    style={{ display: "block", width: "100%", marginBottom: 10 }}
-                />
+
+                <div style={{ marginBottom: "1rem" }}>
+                    <p>
+                        <strong>Selected Latitude:</strong>{" "}
+                        {form.latitude != null ? Number(form.latitude).toFixed(6) : "Not selected"}
+                    </p>
+                    <p>
+                        <strong>Selected Longitude:</strong>{" "}
+                        {form.longitude != null ? Number(form.longitude).toFixed(6) : "Not selected"}
+                    </p>
+                </div>
+
                 <input
                     type="number"
                     placeholder="Radius (meters)"
@@ -113,6 +155,7 @@ function CreateCapsule() {
                     onChange={(e) => handleChange("radiusMeters", e.target.value)}
                     style={{ display: "block", width: "100%", marginBottom: 10 }}
                 />
+
                 <label>Unlock Time</label>
                 <input
                     type="datetime-local"
@@ -121,6 +164,7 @@ function CreateCapsule() {
                     required
                     style={{ display: "block", width: "100%", marginBottom: 10 }}
                 />
+
                 <label>Expiry Time (optional)</label>
                 <input
                     type="datetime-local"
@@ -128,6 +172,7 @@ function CreateCapsule() {
                     onChange={(e) => handleChange("expiryTime", e.target.value)}
                     style={{ display: "block", width: "100%", marginBottom: 10 }}
                 />
+
                 <input
                     type="file"
                     accept="application/pdf"
@@ -146,8 +191,14 @@ function CreateCapsule() {
             <h3>My Capsules</h3>
             <ul>
                 {capsules.map((c) => (
-                    <li key={c._id}>
-                        {c.title} → {c.receiverId?.name} ({c.receiverId?.email}) – status: {c.status}
+                    <li key={c._id} style={{ marginBottom: "0.5rem" }}>
+                        <div>
+                            <strong>{c.title}</strong> → {c.receiverId?.name} ({c.receiverId?.email}) – status:{" "}
+                            {c.status}
+                        </div>
+                        <div>
+                            Lat: {c.latitude}, Lng: {c.longitude}, Radius: {c.radiusMeters}m
+                        </div>
                     </li>
                 ))}
             </ul>

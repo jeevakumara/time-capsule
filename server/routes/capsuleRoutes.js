@@ -1,11 +1,16 @@
 const express = require("express");
 const { protect, authorize } = require("../middleware/authMiddleware");
 const upload = require("../utils/multerConfig");
-const { createCapsule, listCapsulesBySender } = require("../controllers/capsuleController");
+const {
+    createCapsule,
+    listCapsulesBySender,
+    listCapsulesAssignedToReceiver,
+    unlockCapsule,
+} = require("../controllers/capsuleController");
 
 const router = express.Router();
 
-// HR / admin create capsule
+// HR/Admin create capsule
 router.post(
     "/",
     protect,
@@ -14,12 +19,28 @@ router.post(
     createCapsule
 );
 
-// HR / admin list capsules they created
+// HR/Admin list their own capsules
 router.get(
     "/my",
     protect,
     authorize("hr", "admin"),
     listCapsulesBySender
+);
+
+// Interviewer list assigned capsules
+router.get(
+    "/assigned/me",
+    protect,
+    authorize("interviewer"),
+    listCapsulesAssignedToReceiver
+);
+
+// Interviewer unlock capsule with GPS + time
+router.post(
+    "/:id/unlock",
+    protect,
+    authorize("interviewer"),
+    unlockCapsule
 );
 
 module.exports = router;
