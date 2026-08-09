@@ -31,6 +31,7 @@ function App() {
               <ProtectedRoute allowedRoles={["hr", "admin"]}>
                 <CreateUser />
                 <CreateCapsule />
+                <UserList />
               </ProtectedRoute>
             }
           />

@@ -86,4 +86,40 @@ const updateUserStatus = async (req, res) => {
     }
 };
 
-module.exports = { createUser, listUsers, getUserById, updateUserStatus };
+const updateUser = async (req, res) => {
+    try {
+        const { name, role } = req.body;
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+        if (req.user.role === 'hr' && user.role !== 'interviewer') {
+            return res.status(403).json({ success: false, message: "HR can only update interviewers" });
+        }
+
+        if (name) user.name = name;
+        if (role) user.role = role;
+        await user.save();
+
+        res.status(200).json({ success: true, user: { _id: user._id, name: user.name, role: user.role, email: user.email } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+};
+
+const deleteUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+        if (req.user.role === 'hr' && user.role !== 'interviewer') {
+            return res.status(403).json({ success: false, message: "HR can only delete interviewers" });
+        }
+
+        await User.findByIdAndDelete(req.params.id);
+        res.status(200).json({ success: true, message: "User deleted" });
+    } catch (error) {
+        res.status(500).json({ success: false, message: "Server error", error: error.message });
+    }
+};
+
+module.exports = { createUser, listUsers, getUserById, updateUserStatus, updateUser, deleteUser };
