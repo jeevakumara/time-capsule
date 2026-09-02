@@ -1,6 +1,6 @@
 const express = require("express");
 const { protect, authorize } = require("../middleware/authMiddleware");
-const upload = require("../utils/multerConfig");
+const { upload } = require("../utils/multerConfig");
 const {
     createCapsule,
     listCapsulesBySender,

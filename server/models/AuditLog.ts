@@ -1,6 +1,15 @@
-const mongoose = require("mongoose");
+import mongoose, { Document, Schema, Types } from "mongoose";
+const { AUDIT_ACTIONS } = require("../utils/constants");
 
-const auditLogSchema = new mongoose.Schema(
+export interface IAuditLog extends Document {
+    userId: Types.ObjectId;
+    capsuleId?: Types.ObjectId;
+    action: string;
+    result: string;
+    reason?: string;
+}
+
+const auditLogSchema = new Schema<IAuditLog>(
     {
         userId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -14,7 +23,7 @@ const auditLogSchema = new mongoose.Schema(
         },
         action: {
             type: String,
-            enum: ["CREATE_CAPSULE", "UNLOCK_ATTEMPT", "DELETE_CAPSULE"],
+            enum: Object.values(AUDIT_ACTIONS),
             required: true,
         },
         result: {
@@ -27,5 +36,5 @@ const auditLogSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-module.exports = mongoose.model("AuditLog", auditLogSchema);
-
+const AuditLog = mongoose.model<IAuditLog>("AuditLog", auditLogSchema);
+module.exports = AuditLog;

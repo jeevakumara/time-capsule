@@ -2,9 +2,11 @@ const fs = require("fs");
 const path = require("path");
 const Capsule = require("../models/Capsule");
 const { encryptFile, decryptFileToBuffer } = require("../utils/encryption");
-const { haversineDistanceMeters } = require("../utils/distance");
+const { GeoSpatialService } = require("../utils/distance");
 const { sendCapsuleAssignedNotification } = require("../services/notificationService");
 const { addAuditLog } = require("../services/auditService");
+const { validateTimeLock } = require("../utils/securityChecks");
+const { AppError, SecurityError, ValidationError } = require("../utils/errors");
 
 // HR / Admin: create a new capsule
 const createCapsule = async (req, res) => {
@@ -49,8 +51,10 @@ const createCapsule = async (req, res) => {
             receiverId,
             encryptedFilePath: encryptedPath,
             fileName: req.file.originalname,
-            latitude: Number(latitude),
-            longitude: Number(longitude),
+            location: {
+                type: 'Point',
+                coordinates: [Number(longitude), Number(latitude)]
+            },
             radiusMeters: radiusMeters ? Number(radiusMeters) : 100,
             unlockTime: new Date(unlockTime),
             expiryTime: expiryTime ? new Date(expiryTime) : undefined,
@@ -152,7 +156,8 @@ const unlockCapsule = async (req, res) => {
         }
 
         // Layer 1: Identity check
-        if (String(capsule.receiverId) !== String(req.user._id)) {
+        const isAuthorizedUser = String(capsule.receiverId) === String(req.user._id);
+        if (!isAuthorizedUser) {
             await addAuditLog({
                 userId: req.user._id,
                 capsuleId: capsule._id,
@@ -173,42 +178,6 @@ const unlockCapsule = async (req, res) => {
                 capsuleId: capsule._id,
                 action: "UNLOCK_ATTEMPT",
                 result: "FAILURE",
-                reason: "Capsule already expired",
-            });
-
-            return res.status(403).json({
-                success: false,
-                message: "This capsule has expired",
-            });
-        }
-
-        // Layer 2: Time check
-        const now = new Date();
-
-        if (now < capsule.unlockTime) {
-            await addAuditLog({
-                userId: req.user._id,
-                capsuleId: capsule._id,
-                action: "UNLOCK_ATTEMPT",
-                result: "FAILURE",
-                reason: "Unlock time not reached yet",
-            });
-
-            return res.status(403).json({
-                success: false,
-                message: `Unlock time not reached yet. Unlocks at ${capsule.unlockTime.toISOString()}`,
-            });
-        }
-
-        if (capsule.expiryTime && now > capsule.expiryTime) {
-            capsule.status = "expired";
-            await capsule.save();
-
-            await addAuditLog({
-                userId: req.user._id,
-                capsuleId: capsule._id,
-                action: "UNLOCK_ATTEMPT",
-                result: "FAILURE",
                 reason: "Capsule expired",
             });
 
@@ -218,15 +187,32 @@ const unlockCapsule = async (req, res) => {
             });
         }
 
+        // Layer 2: Time check
+        const [isTimeValid, timeErrorMessage] = validateTimeLock(capsule.unlockTime, capsule.expiryTime);
+
+        if (!isTimeValid) {
+            if (timeErrorMessage === "Capsule has expired.") {
+                capsule.status = "expired";
+                await capsule.save();
+            }
+
+            throw new SecurityError(timeErrorMessage);
+        }
+
         // Layer 3: Location check
-        const distance = haversineDistanceMeters(
-            capsule.latitude,
-            capsule.longitude,
+        const capsuleLat = capsule.location?.coordinates[1] ?? capsule.latitude;
+        const capsuleLng = capsule.location?.coordinates[0] ?? capsule.longitude;
+
+        const distance = GeoSpatialService.calculateHaversineDistance(
+            capsuleLat,
+            capsuleLng,
             Number(latitude),
             Number(longitude)
         );
+        
+        const isWithinGeofence = distance <= capsule.radiusMeters;
 
-        if (distance > capsule.radiusMeters) {
+        if (!isWithinGeofence) {
             await addAuditLog({
                 userId: req.user._id,
                 capsuleId: capsule._id,
@@ -262,6 +248,7 @@ const unlockCapsule = async (req, res) => {
         const decryptedBuffer = await decryptFileToBuffer(capsule.encryptedFilePath);
 
         capsule.status = "unlocked";
+        capsule.isUnlocked = true;
         await capsule.save();
 
         await addAuditLog({
@@ -292,6 +279,14 @@ const unlockCapsule = async (req, res) => {
             });
         } catch (e) {
             console.error("Error writing audit log for unlockCapsule:", e.message);
+        }
+
+        if (error instanceof AppError) {
+            return res.status(error.statusCode).json({ 
+                success: false, 
+                error: error.message,
+                type: error.name
+            });
         }
 
         res.status(500).json({

@@ -26,10 +26,11 @@ const login = async (req, res) => {
             success: true,
             token,
             user: {
-                id: user._id,
+                _id: user._id,
                 name: user.name,
                 email: user.email,
                 role: user.role,
+                profileImage: user.profileImage,
             },
         });
     } catch (error) {
@@ -38,7 +39,16 @@ const login = async (req, res) => {
 };
 
 const getMe = async (req, res) => {
-    res.status(200).json({ success: true, user: req.user });
+    res.status(200).json({ 
+        success: true, 
+        user: {
+            _id: req.user._id,
+            name: req.user.name,
+            email: req.user.email,
+            role: req.user.role,
+            profileImage: req.user.profileImage,
+        }
+    });
 };
 
 module.exports = { login, getMe };

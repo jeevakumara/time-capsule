@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DashboardLayout from "./components/DashboardLayout";
 import Login from "./pages/Login";
 import UserList from "./pages/UserList";
-import CreateUser from "./pages/CreateUser";
-import CreateCapsule from "./pages/CreateCapsule";
+import HRDashboard from "./pages/HRDashboard";
 import InterviewerCapsules from "./pages/InterviewerCapsules";
 
 function App() {
@@ -20,7 +18,9 @@ function App() {
             path="/admin"
             element={
               <ProtectedRoute allowedRoles={["admin"]}>
-                <UserList />
+                <DashboardLayout>
+                  <UserList />
+                </DashboardLayout>
               </ProtectedRoute>
             }
           />
@@ -29,9 +29,9 @@ function App() {
             path="/hr"
             element={
               <ProtectedRoute allowedRoles={["hr", "admin"]}>
-                <CreateUser />
-                <CreateCapsule />
-                <UserList />
+                <DashboardLayout>
+                  <HRDashboard />
+                </DashboardLayout>
               </ProtectedRoute>
             }
           />
@@ -40,8 +40,13 @@ function App() {
             path="/interviewer"
             element={
               <ProtectedRoute allowedRoles={["interviewer"]}>
-                <h2>Interviewer Dashboard</h2>
-                <InterviewerCapsules />
+                <DashboardLayout>
+                  <div className="mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900">Interviewer Dashboard</h2>
+                    <p className="text-gray-500 mt-1">View and unlock time capsules assigned to you.</p>
+                  </div>
+                  <InterviewerCapsules />
+                </DashboardLayout>
               </ProtectedRoute>
             }
           />

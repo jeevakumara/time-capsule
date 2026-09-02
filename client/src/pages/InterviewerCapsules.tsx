@@ -1,16 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
-import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
 
 function InterviewerCapsules() {
-    const { logout } = useAuth();
-    const navigate = useNavigate();
-
-    const handleLogout = () => {
-        logout();
-        navigate("/login");
-    };
 
     const [capsules, setCapsules] = useState([]);
     const [status, setStatus] = useState("");
@@ -82,44 +73,53 @@ function InterviewerCapsules() {
     };
 
     return (
-        <div style={{ padding: "2rem" }}>
-            <button onClick={handleLogout} style={{ marginBottom: "1rem" }}>
-                Logout
-            </button>
-            <h2>My Assigned Capsules</h2>
+        <div className="bg-white shadow-sm ring-1 ring-gray-200 rounded-xl p-6 font-sans">
+            <h2 className="text-lg font-semibold text-gray-900 border-b pb-2 mb-6">My Assigned Capsules</h2>
 
-            {error && <p style={{ color: "red" }}>{error}</p>}
-            {status && <p style={{ color: "green" }}>{status}</p>}
+            {error && <p className="text-sm text-red-600 bg-red-50 p-2 rounded mb-4">{error}</p>}
+            {status && <p className="text-sm text-green-600 bg-green-50 p-2 rounded mb-4">{status}</p>}
 
-            <ul>
-                {capsules.map((c) => (
-                    <li key={c._id} style={{ marginBottom: "1rem" }}>
-                        <div>
-                            <strong>{c.title}</strong> — status: {c.status}
-                        </div>
-                        <div>Unlock time: {new Date(c.unlockTime).toLocaleString()}</div>
-                        <button
-                            disabled={c.status === "expired"}
-                            onClick={() => requestLocationAndUnlock(c)}
-                        >
-                            {c.status === "unlocked" ? "View Again" : "Unlock"}
-                        </button>
-                    </li>
-                ))}
-            </ul>
+            {capsules.length === 0 ? (
+                <p className="text-sm text-gray-500">No capsules assigned to you yet.</p>
+            ) : (
+                <ul className="space-y-4">
+                    {capsules.map((c) => (
+                        <li key={c._id} className="p-4 border border-gray-200 rounded-lg bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <h4 className="font-medium text-gray-900">{c.title}</h4>
+                                <div className="text-sm text-gray-500 mt-1">
+                                    Unlock time: {new Date(c.unlockTime).toLocaleString()}
+                                </div>
+                                <div className="text-xs text-gray-400 mt-1">
+                                    Status: <span className="font-semibold text-gray-600">{c.status}</span>
+                                </div>
+                            </div>
+                            <button
+                                disabled={c.status === "expired"}
+                                onClick={() => requestLocationAndUnlock(c)}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {c.status === "unlocked" ? "View Again" : "Unlock"}
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
 
             {pdfUrl && (
-                <div style={{ marginTop: "2rem" }}>
-                    <h3>Viewing: {activeCapsuleTitle}</h3>
+                <div className="mt-8">
+                    <h3 className="text-lg font-semibold text-gray-900 border-b pb-2 mb-4">Viewing: {activeCapsuleTitle}</h3>
                     <iframe
                         src={pdfUrl}
                         title="Unlocked Document"
-                        width="100%"
-                        height="600px"
-                        style={{ border: "1px solid #ccc" }}
+                        className="w-full h-screen min-h-[600px] border border-gray-200 rounded-lg mt-4 shadow-sm"
                     />
-                    <div style={{ marginTop: "0.5rem" }}>
-                        <a href={pdfUrl} download={`${activeCapsuleTitle}.pdf`}>
+                    <div className="mt-4">
+                        <a 
+                            href={pdfUrl} 
+                            download={`${activeCapsuleTitle}.pdf`}
+                            className="text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                        >
                             Download PDF
                         </a>
                     </div>

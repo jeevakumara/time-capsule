@@ -1,6 +1,14 @@
-const mongoose = require("mongoose");
+import mongoose, { Document, Schema, Types } from "mongoose";
 
-const notificationSchema = new mongoose.Schema(
+export interface INotification extends Document {
+    receiverId: Types.ObjectId;
+    capsuleId: Types.ObjectId;
+    message: string;
+    title: string;
+    status: string;
+}
+
+const notificationSchema = new Schema<INotification>(
     {
         receiverId: {
             type: mongoose.Schema.Types.ObjectId,
@@ -23,4 +31,5 @@ const notificationSchema = new mongoose.Schema(
     { timestamps: true }
 );
 
-module.exports = mongoose.model("Notification", notificationSchema);
+const Notification = mongoose.model<INotification>("Notification", notificationSchema);
+module.exports = Notification;
