@@ -5,6 +5,7 @@ const { sendCapsuleAssignedNotification } = require("../services/notificationSer
 const { addAuditLog } = require("../services/auditService");
 const { validateTimeLock } = require("../utils/securityChecks");
 const { AppError, SecurityError } = require("../utils/errors");
+const { compress, decompress } = require("../utils/compression");
 
 // HR / Admin: create a new capsule
 const createCapsule = async (req, res) => {
@@ -34,8 +35,10 @@ const createCapsule = async (req, res) => {
             });
         }
 
-        // Encrypt the in-memory PDF buffer, store the result directly in MongoDB
-        const encryptedFile = encryptBuffer(req.file.buffer);
+        // Step 1: Compress the PDF (before encryption — encrypted data cannot be compressed)
+        const compressedBuffer = await compress(req.file.buffer);
+        // Step 2: Encrypt the compressed buffer — stored in MongoDB
+        const encryptedFile = encryptBuffer(compressedBuffer);
 
         const capsule = await Capsule.create({
             title,
@@ -201,8 +204,9 @@ const unlockCapsule = async (req, res) => {
             });
         }
 
-        // Layer 6: Decrypt and stream back
-        const decryptedBuffer = decryptBuffer(capsule.encryptedFile);
+        // Layer 6: Decrypt then decompress (reverse of upload pipeline)
+        const decryptedCompressed = decryptBuffer(capsule.encryptedFile);
+        const decryptedBuffer = await decompress(decryptedCompressed);
 
         capsule.status = "unlocked";
         capsule.isUnlocked = true;
@@ -303,3 +307,5 @@ module.exports = {
     unlockCapsule,
     deleteCapsule,
 };
+
+
