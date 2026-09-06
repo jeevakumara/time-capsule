@@ -1,11 +1,19 @@
-FROM node:20-alpine
+FROM node:20-alpine AS builder
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-# Compile TypeScript to JavaScript
 RUN npm run build
-# Expose the port the app runs on
+
+FROM node:20-alpine
+
+WORKDIR /app
+COPY package*.json ./
+# Install only production dependencies
+RUN npm install --omit=dev
+# Copy the compiled JS from the builder stage
+COPY --from=builder /app/dist ./dist
+
 EXPOSE 5000
-# Run the compiled JS
 CMD ["npm", "run", "start"]
