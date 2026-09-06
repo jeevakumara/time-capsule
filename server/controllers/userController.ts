@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const User = require("../models/User");
+const { uploadAvatar, deleteAvatar } = require("../utils/gcsService");
 
 const generateTempPassword = () => crypto.randomBytes(4).toString("hex");
 
@@ -19,10 +20,10 @@ const createUser = async (req, res) => {
 
         const tempPassword = generateTempPassword();
         const passwordHash = await bcrypt.hash(tempPassword, 10);
-        
+
         let profileImage = null;
         if (req.file) {
-            profileImage = `/uploads/avatars/${req.file.filename}`;
+            profileImage = await uploadAvatar(req.file.buffer, req.file.originalname, req.file.mimetype);
         }
 
         const user = await User.create({
@@ -99,8 +100,8 @@ const updateUser = async (req, res) => {
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
         const isSelf = req.user._id.toString() === user._id.toString();
-        const isAdmin = req.user.role === 'admin';
-        const isHrUpdatingInterviewer = req.user.role === 'hr' && user.role === 'interviewer';
+        const isAdmin = req.user.role === "admin";
+        const isHrUpdatingInterviewer = req.user.role === "hr" && user.role === "interviewer";
 
         if (!isSelf && !isAdmin && !isHrUpdatingInterviewer) {
             return res.status(403).json({ success: false, message: "Permission denied" });
@@ -112,14 +113,29 @@ const updateUser = async (req, res) => {
 
         if (name) user.name = name;
         if (role && isAdmin) user.role = role;
-        
+
         if (req.file) {
-            user.profileImage = `/uploads/avatars/${req.file.filename}`;
+            // Delete old avatar from GCS before uploading new one
+            await deleteAvatar(user.profileImage);
+            user.profileImage = await uploadAvatar(
+                req.file.buffer,
+                req.file.originalname,
+                req.file.mimetype
+            );
         }
 
         await user.save();
 
-        res.status(200).json({ success: true, user: { _id: user._id, name: user.name, role: user.role, email: user.email, profileImage: user.profileImage } });
+        res.status(200).json({
+            success: true,
+            user: {
+                _id: user._id,
+                name: user.name,
+                role: user.role,
+                email: user.email,
+                profileImage: user.profileImage,
+            },
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: "Server error", error: error.message });
     }
@@ -130,9 +146,12 @@ const deleteUser = async (req, res) => {
         const user = await User.findById(req.params.id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-        if (req.user.role === 'hr' && user.role !== 'interviewer') {
+        if (req.user.role === "hr" && user.role !== "interviewer") {
             return res.status(403).json({ success: false, message: "HR can only delete interviewers" });
         }
+
+        // Clean up avatar from GCS if present
+        await deleteAvatar(user.profileImage);
 
         await User.findByIdAndDelete(req.params.id);
         res.status(200).json({ success: true, message: "User deleted" });

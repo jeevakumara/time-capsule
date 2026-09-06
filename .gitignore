@@ -33,3 +33,7 @@ temp
 Thumbs.db
 .vscode
 .idea
+
+# GCS service account key (local dev only — NEVER commit)
+service-account-key.json
+*-service-account*.json

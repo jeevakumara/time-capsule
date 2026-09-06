@@ -15,14 +15,14 @@ connectDB();
 
 const app = express();
 
-const path = require("path");
-
-// ── Shared middleware (must come before all routes) ────────────────────────────
+// -- Shared middleware ----------------------------------------------------------
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use(express.json());
-app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads/avatars')));
 
-// ── Routes ────────────────────────────────────────────────────────────────────
+// NOTE: /uploads/avatars static route removed.
+// Avatar images are now served directly from Google Cloud Storage public URLs.
+
+// -- Routes --------------------------------------------------------------------
 app.get("/api/health", (req, res) => {
     res.json({ success: true, message: "Time Capsule API is running" });
 });

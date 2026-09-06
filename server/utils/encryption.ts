@@ -1,49 +1,38 @@
 const crypto = require("crypto");
-const fs = require("fs");
 
 const ALGORITHM = "aes-256-cbc";
 
-const getKey = () => Buffer.from(process.env.ENCRYPTION_KEY, "utf8"); // must be 32 bytes
-
-const encryptFile = (inputPath, outputPath) => {
-    return new Promise((resolve, reject) => {
-        const key = getKey();
-        const iv = crypto.randomBytes(16);
-        const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-
-        const input = fs.createReadStream(inputPath);
-        const output = fs.createWriteStream(outputPath);
-
-        output.write(iv); // store IV at the start of the encrypted file
-
-        input.pipe(cipher).pipe(output);
-
-        output.on("finish", resolve);
-        output.on("error", reject);
-        input.on("error", reject);
-    });
+const getKey = (): Buffer => {
+    const key = process.env.ENCRYPTION_KEY;
+    if (!key || Buffer.from(key, "utf8").length !== 32) {
+        throw new Error("ENCRYPTION_KEY must be set and exactly 32 bytes long");
+    }
+    return Buffer.from(key, "utf8");
 };
 
-const decryptFileToBuffer = (encryptedPath) => {
-    return new Promise((resolve, reject) => {
-        try {
-            const key = getKey();
-            const fileBuffer = fs.readFileSync(encryptedPath);
-
-            const iv = fileBuffer.subarray(0, 16);
-            const encryptedData = fileBuffer.subarray(16);
-
-            const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-            const decrypted = Buffer.concat([
-                decipher.update(encryptedData),
-                decipher.final(),
-            ]);
-
-            resolve(decrypted);
-        } catch (error) {
-            reject(error);
-        }
-    });
+/**
+ * Encrypts a plain Buffer using AES-256-CBC.
+ * The 16-byte IV is prepended to the returned Buffer so it can be recovered on decryption.
+ * Format: [ IV (16 bytes) ][ Ciphertext ]
+ */
+const encryptBuffer = (plainBuffer: Buffer): Buffer => {
+    const key = getKey();
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+    const encrypted = Buffer.concat([cipher.update(plainBuffer), cipher.final()]);
+    return Buffer.concat([iv, encrypted]); // IV prepended
 };
 
-module.exports = { encryptFile, decryptFileToBuffer };
+/**
+ * Decrypts an encrypted Buffer produced by encryptBuffer.
+ * Extracts the IV from the first 16 bytes, then decrypts the remainder.
+ */
+const decryptBuffer = (encryptedBuffer: Buffer): Buffer => {
+    const key = getKey();
+    const iv = encryptedBuffer.subarray(0, 16);
+    const ciphertext = encryptedBuffer.subarray(16);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+};
+
+module.exports = { encryptBuffer, decryptBuffer };

@@ -1,12 +1,11 @@
-const fs = require("fs");
-const path = require("path");
 const Capsule = require("../models/Capsule");
-const { encryptFile, decryptFileToBuffer } = require("../utils/encryption");
+const { encryptBuffer, decryptBuffer } = require("../utils/encryption");
+const { uploadEncryptedCapsule, downloadFile, deleteFile } = require("../utils/gcsService");
 const { GeoSpatialService } = require("../utils/distance");
 const { sendCapsuleAssignedNotification } = require("../services/notificationService");
 const { addAuditLog } = require("../services/auditService");
 const { validateTimeLock } = require("../utils/securityChecks");
-const { AppError, SecurityError, ValidationError } = require("../utils/errors");
+const { AppError, SecurityError } = require("../utils/errors");
 
 // HR / Admin: create a new capsule
 const createCapsule = async (req, res) => {
@@ -36,40 +35,34 @@ const createCapsule = async (req, res) => {
             });
         }
 
-        const originalPath = req.file.path;
-        const encryptedFileName = "enc-" + req.file.filename;
-        const encryptedPath = path.join(path.dirname(originalPath), encryptedFileName);
-
-        // Encrypt and delete original
-        await encryptFile(originalPath, encryptedPath);
-        fs.unlinkSync(originalPath);
+        // Encrypt the in-memory PDF buffer, then stream to GCS — no disk I/O
+        const encryptedBuffer = encryptBuffer(req.file.buffer);
+        const gcsObjectKey = await uploadEncryptedCapsule(encryptedBuffer, req.file.originalname);
 
         const capsule = await Capsule.create({
             title,
             description,
             senderId: req.user._id,
             receiverId,
-            encryptedFilePath: encryptedPath,
+            encryptedFilePath: gcsObjectKey, // now stores "capsules/<key>.enc"
             fileName: req.file.originalname,
             location: {
-                type: 'Point',
-                coordinates: [Number(longitude), Number(latitude)]
+                type: "Point",
+                coordinates: [Number(longitude), Number(latitude)],
             },
             radiusMeters: radiusMeters ? Number(radiusMeters) : 100,
             unlockTime: new Date(unlockTime),
             expiryTime: expiryTime ? new Date(expiryTime) : undefined,
         });
 
-        // Audit: success
         await addAuditLog({
             userId: req.user._id,
             capsuleId: capsule._id,
             action: "CREATE_CAPSULE",
             result: "SUCCESS",
-            reason: "Capsule created and encrypted successfully",
+            reason: "Capsule created, encrypted, and uploaded to GCS",
         });
 
-        // Notify receiver (email + notification record)
         await sendCapsuleAssignedNotification(capsule);
 
         res.status(201).json({
@@ -78,21 +71,7 @@ const createCapsule = async (req, res) => {
             capsule,
         });
     } catch (error) {
-        console.error(error);
-
-        // Audit: failure (capsuleId may be null if creation failed early)
-        try {
-            await addAuditLog({
-                userId: req.user?._id,
-                capsuleId: null,
-                action: "CREATE_CAPSULE",
-                result: "FAILURE",
-                reason: error.message,
-            });
-        } catch (e) {
-            console.error("Error writing audit log for createCapsule:", e.message);
-        }
-
+        console.error("Error creating capsule:", error);
         res.status(500).json({
             success: false,
             message: "Server error while creating capsule",
@@ -101,13 +80,10 @@ const createCapsule = async (req, res) => {
     }
 };
 
-// HR / Admin: list capsules created by this user
+// HR / Admin: list capsules created by this sender
 const listCapsulesBySender = async (req, res) => {
     try {
-        const capsules = await Capsule.find({ senderId: req.user._id })
-            .populate("receiverId", "name email")
-            .sort({ createdAt: -1 });
-
+        const capsules = await Capsule.find({ senderId: req.user._id }).sort({ createdAt: -1 });
         res.status(200).json({ success: true, capsules });
     } catch (error) {
         res.status(500).json({
@@ -121,9 +97,7 @@ const listCapsulesBySender = async (req, res) => {
 // Interviewer: list capsules assigned to this receiver
 const listCapsulesAssignedToReceiver = async (req, res) => {
     try {
-        const capsules = await Capsule.find({ receiverId: req.user._id }).sort({
-            createdAt: -1,
-        });
+        const capsules = await Capsule.find({ receiverId: req.user._id }).sort({ createdAt: -1 });
         res.status(200).json({ success: true, capsules });
     } catch (error) {
         res.status(500).json({
@@ -134,7 +108,7 @@ const listCapsulesAssignedToReceiver = async (req, res) => {
     }
 };
 
-// Interviewer: secure unlock (identity + time + location + decryption)
+// Interviewer: secure unlock (identity + status + time + location + decryption)
 const unlockCapsule = async (req, res) => {
     try {
         const { latitude, longitude } = req.body;
@@ -149,13 +123,10 @@ const unlockCapsule = async (req, res) => {
 
         const capsule = await Capsule.findById(capsuleId);
         if (!capsule) {
-            return res.status(404).json({
-                success: false,
-                message: "Capsule not found",
-            });
+            return res.status(404).json({ success: false, message: "Capsule not found" });
         }
 
-        // Layer 1: Identity check
+        // Layer 1: Identity
         const isAuthorizedUser = String(capsule.receiverId) === String(req.user._id);
         if (!isAuthorizedUser) {
             await addAuditLog({
@@ -165,13 +136,13 @@ const unlockCapsule = async (req, res) => {
                 result: "FAILURE",
                 reason: "User is not the intended receiver",
             });
-
             return res.status(403).json({
                 success: false,
                 message: "You are not the intended receiver of this capsule",
             });
         }
 
+        // Layer 2: Status
         if (capsule.status === "expired") {
             await addAuditLog({
                 userId: req.user._id,
@@ -180,36 +151,28 @@ const unlockCapsule = async (req, res) => {
                 result: "FAILURE",
                 reason: "Capsule expired",
             });
-
-            return res.status(403).json({
-                success: false,
-                message: "This capsule has expired",
-            });
+            return res.status(403).json({ success: false, message: "This capsule has expired" });
         }
 
-        // Layer 2: Time check
+        // Layer 3: Time (server-side, UTC)
         const [isTimeValid, timeErrorMessage] = validateTimeLock(capsule.unlockTime, capsule.expiryTime);
-
         if (!isTimeValid) {
             if (timeErrorMessage === "Capsule has expired.") {
                 capsule.status = "expired";
                 await capsule.save();
             }
-
             throw new SecurityError(timeErrorMessage);
         }
 
-        // Layer 3: Location check
-        const capsuleLat = capsule.location?.coordinates[1] ?? capsule.latitude;
-        const capsuleLng = capsule.location?.coordinates[0] ?? capsule.longitude;
-
+        // Layer 4: Location (Haversine)
+        const capsuleLat = capsule.location?.coordinates[1];
+        const capsuleLng = capsule.location?.coordinates[0];
         const distance = GeoSpatialService.calculateHaversineDistance(
             capsuleLat,
             capsuleLng,
             Number(latitude),
             Number(longitude)
         );
-        
         const isWithinGeofence = distance <= capsule.radiusMeters;
 
         if (!isWithinGeofence) {
@@ -220,32 +183,15 @@ const unlockCapsule = async (req, res) => {
                 result: "FAILURE",
                 reason: `Outside allowed radius. Distance=${Math.round(distance)}m`,
             });
-
             return res.status(403).json({
                 success: false,
-                message: `You are outside the allowed location. Distance: ${Math.round(
-                    distance
-                )}m (allowed: ${capsule.radiusMeters}m)`,
+                message: `You are outside the allowed location. Distance: ${Math.round(distance)}m (allowed: ${capsule.radiusMeters}m)`,
             });
         }
 
-        // All checks passed â€” decrypt the file
-        if (!fs.existsSync(capsule.encryptedFilePath)) {
-            await addAuditLog({
-                userId: req.user._id,
-                capsuleId: capsule._id,
-                action: "UNLOCK_ATTEMPT",
-                result: "FAILURE",
-                reason: "Encrypted file missing on server",
-            });
-
-            return res.status(500).json({
-                success: false,
-                message: "Encrypted file not found on server",
-            });
-        }
-
-        const decryptedBuffer = await decryptFileToBuffer(capsule.encryptedFilePath);
+        // Layer 5: Download from GCS + Layer 6: Decrypt
+        const encryptedBuffer = await downloadFile(capsule.encryptedFilePath);
+        const decryptedBuffer = decryptBuffer(encryptedBuffer);
 
         capsule.status = "unlocked";
         capsule.isUnlocked = true;
@@ -256,7 +202,7 @@ const unlockCapsule = async (req, res) => {
             capsuleId: capsule._id,
             action: "UNLOCK_ATTEMPT",
             result: "SUCCESS",
-            reason: "All checks passed and file decrypted",
+            reason: "All checks passed, file downloaded from GCS and decrypted",
         });
 
         res.set({
@@ -264,10 +210,10 @@ const unlockCapsule = async (req, res) => {
             "Content-Disposition": `inline; filename="${capsule.fileName}"`,
             "Content-Length": decryptedBuffer.length,
         });
-
         return res.status(200).send(decryptedBuffer);
+
     } catch (error) {
-        console.error(error);
+        console.error("unlockCapsule error:", error);
 
         try {
             await addAuditLog({
@@ -278,14 +224,14 @@ const unlockCapsule = async (req, res) => {
                 reason: error.message,
             });
         } catch (e) {
-            console.error("Error writing audit log for unlockCapsule:", e.message);
+            console.error("Error writing audit log:", e.message);
         }
 
         if (error instanceof AppError) {
-            return res.status(error.statusCode).json({ 
-                success: false, 
+            return res.status(error.statusCode).json({
+                success: false,
                 error: error.message,
-                type: error.name
+                type: error.name,
             });
         }
 
@@ -297,20 +243,16 @@ const unlockCapsule = async (req, res) => {
     }
 };
 
-// HR / Admin: delete a capsule
+// HR / Admin: delete a capsule + its GCS file
 const deleteCapsule = async (req, res) => {
     try {
         const capsuleId = req.params.id;
         const capsule = await Capsule.findById(capsuleId);
 
         if (!capsule) {
-            return res.status(404).json({
-                success: false,
-                message: "Capsule not found",
-            });
+            return res.status(404).json({ success: false, message: "Capsule not found" });
         }
 
-        // Only sender or admin can delete
         if (String(capsule.senderId) !== String(req.user._id) && req.user.role !== "admin") {
             return res.status(403).json({
                 success: false,
@@ -318,30 +260,23 @@ const deleteCapsule = async (req, res) => {
             });
         }
 
-        // Delete encrypted file from file system
-        if (fs.existsSync(capsule.encryptedFilePath)) {
-            fs.unlinkSync(capsule.encryptedFilePath);
-        }
+        // Delete encrypted file from GCS (silent if already missing)
+        await deleteFile(capsule.encryptedFilePath);
 
-        // Delete the capsule from DB
         await Capsule.findByIdAndDelete(capsuleId);
 
-        // Also delete any notifications associated with this capsule to avoid orphaned data
         const Notification = require("../models/Notification");
-        await Notification.deleteMany({ capsuleId: capsuleId });
+        await Notification.deleteMany({ capsuleId });
 
         await addAuditLog({
             userId: req.user._id,
             capsuleId: capsule._id,
             action: "DELETE_CAPSULE",
             result: "SUCCESS",
-            reason: "Capsule deleted successfully",
+            reason: "Capsule and GCS file deleted successfully",
         });
 
-        res.status(200).json({
-            success: true,
-            message: "Capsule deleted successfully",
-        });
+        res.status(200).json({ success: true, message: "Capsule deleted successfully" });
     } catch (error) {
         console.error("Error deleting capsule:", error);
         res.status(500).json({

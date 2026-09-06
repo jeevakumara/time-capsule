@@ -1,39 +1,33 @@
 const multer = require("multer");
-const path = require("path");
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, path.join(__dirname, "..", "uploads")),
-    filename: (req, file, cb) => {
-        const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, unique + "-" + file.originalname);
-    },
-});
+// All files are held in memory — no local disk writes.
+// Buffers are passed to the controller via req.file.buffer
+// and streamed directly to Google Cloud Storage.
 
-const fileFilter = (req, file, cb) => {
+const memStorage = multer.memoryStorage();
+
+// --- Capsule PDF Upload ---
+const pdfFilter = (req, file, cb) => {
     if (file.mimetype === "application/pdf") cb(null, true);
     else cb(new Error("Only PDF files are allowed"), false);
 };
 
-const upload = multer({ storage, fileFilter });
-
-// --- Avatar Upload Config ---
-const avatarStorage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, path.join(__dirname, "..", "uploads", "avatars")),
-    filename: (req, file, cb) => {
-        const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
-        cb(null, "avatar-" + unique + path.extname(file.originalname));
-    },
+const upload = multer({
+    storage: memStorage,
+    fileFilter: pdfFilter,
+    limits: { fileSize: 20 * 1024 * 1024 }, // 20 MB
 });
 
-const avatarFileFilter = (req, file, cb) => {
+// --- Avatar Image Upload ---
+const avatarFilter = (req, file, cb) => {
     if (file.mimetype === "image/jpeg" || file.mimetype === "image/png") cb(null, true);
     else cb(new Error("Only JPEG/PNG files are allowed"), false);
 };
 
 const uploadAvatar = multer({
-    storage: avatarStorage,
-    fileFilter: avatarFileFilter,
-    limits: { fileSize: 2 * 1024 * 1024 } // 2MB
+    storage: memStorage,
+    fileFilter: avatarFilter,
+    limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
 });
 
 module.exports = { upload, uploadAvatar };
