@@ -6,7 +6,7 @@ export interface ICapsule extends Document {
     description?: string;
     senderId: Types.ObjectId;
     receiverId: Types.ObjectId;
-    encryptedFilePath: string;
+    encryptedFile: Buffer;   // AES-256-CBC encrypted PDF stored in MongoDB
     fileName: string;
     location: {
         type: string;
@@ -35,15 +35,16 @@ const capsuleSchema = new Schema<ICapsule>(
             required: true,
         },
 
-        encryptedFilePath: { type: String, required: true },
+        // Encrypted PDF binary stored directly in MongoDB (AES-256-CBC, IV prepended)
+        encryptedFile: { type: Buffer, required: true },
         fileName: { type: String, required: true },
 
         location: {
-            type: { type: String, enum: ['Point'], default: 'Point' },
+            type: { type: String, enum: ["Point"], default: "Point" },
             coordinates: {
                 type: [Number], // [longitude, latitude]
-                required: true
-            }
+                required: true,
+            },
         },
         radiusMeters: { type: Number, default: 100 },
 

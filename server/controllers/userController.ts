@@ -1,7 +1,7 @@
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const User = require("../models/User");
-const { uploadAvatar, deleteAvatar } = require("../utils/gcsService");
+const { bufferToDataUrl } = require("../utils/gcsService");
 
 const generateTempPassword = () => crypto.randomBytes(4).toString("hex");
 
@@ -21,9 +21,10 @@ const createUser = async (req, res) => {
         const tempPassword = generateTempPassword();
         const passwordHash = await bcrypt.hash(tempPassword, 10);
 
+        // Avatar stored as base64 data URL directly in MongoDB
         let profileImage = null;
         if (req.file) {
-            profileImage = await uploadAvatar(req.file.buffer, req.file.originalname, req.file.mimetype);
+            profileImage = bufferToDataUrl(req.file.buffer, req.file.mimetype);
         }
 
         const user = await User.create({
@@ -115,13 +116,8 @@ const updateUser = async (req, res) => {
         if (role && isAdmin) user.role = role;
 
         if (req.file) {
-            // Delete old avatar from GCS before uploading new one
-            await deleteAvatar(user.profileImage);
-            user.profileImage = await uploadAvatar(
-                req.file.buffer,
-                req.file.originalname,
-                req.file.mimetype
-            );
+            // Replace old avatar with new base64 data URL
+            user.profileImage = bufferToDataUrl(req.file.buffer, req.file.mimetype);
         }
 
         await user.save();
@@ -149,9 +145,6 @@ const deleteUser = async (req, res) => {
         if (req.user.role === "hr" && user.role !== "interviewer") {
             return res.status(403).json({ success: false, message: "HR can only delete interviewers" });
         }
-
-        // Clean up avatar from GCS if present
-        await deleteAvatar(user.profileImage);
 
         await User.findByIdAndDelete(req.params.id);
         res.status(200).json({ success: true, message: "User deleted" });

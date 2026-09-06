@@ -1,6 +1,5 @@
 const Capsule = require("../models/Capsule");
 const { encryptBuffer, decryptBuffer } = require("../utils/encryption");
-const { uploadEncryptedCapsule, downloadFile, deleteFile } = require("../utils/gcsService");
 const { GeoSpatialService } = require("../utils/distance");
 const { sendCapsuleAssignedNotification } = require("../services/notificationService");
 const { addAuditLog } = require("../services/auditService");
@@ -35,16 +34,15 @@ const createCapsule = async (req, res) => {
             });
         }
 
-        // Encrypt the in-memory PDF buffer, then stream to GCS — no disk I/O
-        const encryptedBuffer = encryptBuffer(req.file.buffer);
-        const gcsObjectKey = await uploadEncryptedCapsule(encryptedBuffer, req.file.originalname);
+        // Encrypt the in-memory PDF buffer, store the result directly in MongoDB
+        const encryptedFile = encryptBuffer(req.file.buffer);
 
         const capsule = await Capsule.create({
             title,
             description,
             senderId: req.user._id,
             receiverId,
-            encryptedFilePath: gcsObjectKey, // now stores "capsules/<key>.enc"
+            encryptedFile,                  // Buffer stored in MongoDB document
             fileName: req.file.originalname,
             location: {
                 type: "Point",
@@ -60,15 +58,17 @@ const createCapsule = async (req, res) => {
             capsuleId: capsule._id,
             action: "CREATE_CAPSULE",
             result: "SUCCESS",
-            reason: "Capsule created, encrypted, and uploaded to GCS",
+            reason: "Capsule created, encrypted, and stored in MongoDB",
         });
 
         await sendCapsuleAssignedNotification(capsule);
 
+        // Don't return the encrypted binary in the API response
+        const { encryptedFile: _, ...capsuleData } = capsule.toObject();
         res.status(201).json({
             success: true,
             message: "Capsule created successfully",
-            capsule,
+            capsule: capsuleData,
         });
     } catch (error) {
         console.error("Error creating capsule:", error);
@@ -80,10 +80,12 @@ const createCapsule = async (req, res) => {
     }
 };
 
-// HR / Admin: list capsules created by this sender
+// HR / Admin: list capsules created by this sender (never return encrypted binary)
 const listCapsulesBySender = async (req, res) => {
     try {
-        const capsules = await Capsule.find({ senderId: req.user._id }).sort({ createdAt: -1 });
+        const capsules = await Capsule.find({ senderId: req.user._id })
+            .select("-encryptedFile")
+            .sort({ createdAt: -1 });
         res.status(200).json({ success: true, capsules });
     } catch (error) {
         res.status(500).json({
@@ -94,10 +96,12 @@ const listCapsulesBySender = async (req, res) => {
     }
 };
 
-// Interviewer: list capsules assigned to this receiver
+// Interviewer: list capsules assigned to this receiver (never return encrypted binary)
 const listCapsulesAssignedToReceiver = async (req, res) => {
     try {
-        const capsules = await Capsule.find({ receiverId: req.user._id }).sort({ createdAt: -1 });
+        const capsules = await Capsule.find({ receiverId: req.user._id })
+            .select("-encryptedFile")
+            .sort({ createdAt: -1 });
         res.status(200).json({ success: true, capsules });
     } catch (error) {
         res.status(500).json({
@@ -121,6 +125,7 @@ const unlockCapsule = async (req, res) => {
             });
         }
 
+        // Fetch WITH the encrypted binary for decryption
         const capsule = await Capsule.findById(capsuleId);
         if (!capsule) {
             return res.status(404).json({ success: false, message: "Capsule not found" });
@@ -154,7 +159,7 @@ const unlockCapsule = async (req, res) => {
             return res.status(403).json({ success: false, message: "This capsule has expired" });
         }
 
-        // Layer 3: Time (server-side, UTC)
+        // Layer 3: Time (server-side UTC)
         const [isTimeValid, timeErrorMessage] = validateTimeLock(capsule.unlockTime, capsule.expiryTime);
         if (!isTimeValid) {
             if (timeErrorMessage === "Capsule has expired.") {
@@ -173,9 +178,8 @@ const unlockCapsule = async (req, res) => {
             Number(latitude),
             Number(longitude)
         );
-        const isWithinGeofence = distance <= capsule.radiusMeters;
 
-        if (!isWithinGeofence) {
+        if (distance > capsule.radiusMeters) {
             await addAuditLog({
                 userId: req.user._id,
                 capsuleId: capsule._id,
@@ -189,9 +193,16 @@ const unlockCapsule = async (req, res) => {
             });
         }
 
-        // Layer 5: Download from GCS + Layer 6: Decrypt
-        const encryptedBuffer = await downloadFile(capsule.encryptedFilePath);
-        const decryptedBuffer = decryptBuffer(encryptedBuffer);
+        // Layer 5: Verify encrypted data exists in DB
+        if (!capsule.encryptedFile) {
+            return res.status(500).json({
+                success: false,
+                message: "Encrypted file data not found in database",
+            });
+        }
+
+        // Layer 6: Decrypt and stream back
+        const decryptedBuffer = decryptBuffer(capsule.encryptedFile);
 
         capsule.status = "unlocked";
         capsule.isUnlocked = true;
@@ -202,7 +213,7 @@ const unlockCapsule = async (req, res) => {
             capsuleId: capsule._id,
             action: "UNLOCK_ATTEMPT",
             result: "SUCCESS",
-            reason: "All checks passed, file downloaded from GCS and decrypted",
+            reason: "All checks passed, file decrypted from MongoDB",
         });
 
         res.set({
@@ -243,11 +254,11 @@ const unlockCapsule = async (req, res) => {
     }
 };
 
-// HR / Admin: delete a capsule + its GCS file
+// HR / Admin: delete a capsule (removes document including encrypted binary)
 const deleteCapsule = async (req, res) => {
     try {
         const capsuleId = req.params.id;
-        const capsule = await Capsule.findById(capsuleId);
+        const capsule = await Capsule.findById(capsuleId).select("-encryptedFile");
 
         if (!capsule) {
             return res.status(404).json({ success: false, message: "Capsule not found" });
@@ -260,9 +271,7 @@ const deleteCapsule = async (req, res) => {
             });
         }
 
-        // Delete encrypted file from GCS (silent if already missing)
-        await deleteFile(capsule.encryptedFilePath);
-
+        // Deleting the document also removes the encryptedFile Buffer from MongoDB
         await Capsule.findByIdAndDelete(capsuleId);
 
         const Notification = require("../models/Notification");
@@ -273,7 +282,7 @@ const deleteCapsule = async (req, res) => {
             capsuleId: capsule._id,
             action: "DELETE_CAPSULE",
             result: "SUCCESS",
-            reason: "Capsule and GCS file deleted successfully",
+            reason: "Capsule deleted from MongoDB",
         });
 
         res.status(200).json({ success: true, message: "Capsule deleted successfully" });
