@@ -1,18 +1,27 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-function ProtectedRoute({ children, allowedRoles }) {
-  const { user } = useAuth();
+interface ProtectedRouteProps {
+    children: React.ReactNode;
+    allowedRoles?: string[];
+}
 
-  if (!user) {
-    return <Navigate to="/login" />;
-  }
+function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+    const { user } = useAuth();
+    const location = useLocation();
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/login" />;
-  }
+    // Not logged in — preserve the attempted URL in location.state.returnTo
+    // so Login can redirect back after successful authentication.
+    if (!user) {
+        return <Navigate to="/login" state={{ returnTo: location.pathname }} replace />;
+    }
 
-  return children;
+    // Logged in but wrong role
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+        return <Navigate to="/login" replace />;
+    }
+
+    return <>{children}</>;
 }
 
 export default ProtectedRoute;
