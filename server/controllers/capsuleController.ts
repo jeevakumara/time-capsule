@@ -3,7 +3,7 @@ const { encryptBuffer, decryptBuffer } = require("../utils/encryption");
 const { GeoSpatialService } = require("../utils/distance");
 const { sendCapsuleAssignedNotification } = require("../services/notificationService");
 const { addAuditLog } = require("../services/auditService");
-const { validateTimeLock } = require("../utils/securityChecks");
+const { validateTimeLock, validateGpsCoordinates } = require("../utils/securityChecks");
 const { AppError, SecurityError } = require("../utils/errors");
 const { compress, decompress } = require("../utils/compression");
 
@@ -121,11 +121,12 @@ const unlockCapsule = async (req, res) => {
         const { latitude, longitude } = req.body;
         const capsuleId = req.params.id;
 
-        if (latitude === undefined || longitude === undefined) {
-            return res.status(400).json({
-                success: false,
-                message: "Latitude and longitude are required",
-            });
+        // Phase 7: parse and strictly validate GPS coordinates before any DB work
+        const lat = parseFloat(latitude);
+        const lng = parseFloat(longitude);
+        const [gpsValid, gpsError] = validateGpsCoordinates(lat, lng);
+        if (!gpsValid) {
+            return res.status(400).json({ success: false, message: gpsError });
         }
 
         // Fetch WITH the encrypted binary for decryption
@@ -178,8 +179,8 @@ const unlockCapsule = async (req, res) => {
         const distance = GeoSpatialService.calculateHaversineDistance(
             capsuleLat,
             capsuleLng,
-            Number(latitude),
-            Number(longitude)
+            lat,
+            lng
         );
 
         if (distance > capsule.radiusMeters) {
@@ -307,5 +308,7 @@ module.exports = {
     unlockCapsule,
     deleteCapsule,
 };
+
+
 
 
