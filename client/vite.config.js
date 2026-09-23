@@ -8,4 +8,14 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  // Unit 4: Explicit bundler config — entry point, chunk strategy, source maps
+  build: {
+    sourcemap: true,
+    rollupOptions: {
+      input: { main: './index.html' },
+      output: {
+        chunkFileNames: 'assets/[name]-[hash].js',
+      },
+    },
+  },
 })

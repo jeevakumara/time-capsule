@@ -18,6 +18,8 @@ router.get("/", protect, authorize("admin", "hr"), listUsers);
 router.get("/:id", protect, authorize("admin", "hr"), getUserById);
 router.patch("/:id/status", protect, authorize("admin"), updateUserStatus);
 router.patch("/:id", protect, authorize("admin", "hr"), uploadAvatar.single('profileImage'), updateUser);
+// PUT: Full user profile replace — Unit 4: complete HTTP verb surface (GET, POST, PATCH, PUT, DELETE)
+router.put("/:id", protect, authorize("admin"), uploadAvatar.single('profileImage'), updateUser);
 router.delete("/:id", protect, authorize("admin", "hr"), deleteUser);
 
 module.exports = router;

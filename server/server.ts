@@ -25,3 +25,24 @@ const server = http.createServer(app);
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+// -- Unit 4: Cron-style background task (native setInterval, no external packages) --
+// Automatically marks capsules as 'expired' once their expiryTime has passed.
+const EXPIRY_CHECK_INTERVAL_MS = 60 * 1000; // every 60 seconds
+
+setInterval(async () => {
+    try {
+        const Capsule = require("./models/Capsule");
+        const result = await Capsule.updateMany(
+            { expiryTime: { $lt: new Date() }, status: { $ne: "expired" } },
+            { $set: { status: "expired" } }
+        );
+        if (result.modifiedCount > 0) {
+            console.log(`[Cron] Auto-expired ${result.modifiedCount} capsule(s).`);
+        }
+    } catch (err: any) {
+        console.error("[Cron] Capsule expiry check failed:", err.message);
+    }
+}, EXPIRY_CHECK_INTERVAL_MS);
+
+console.log("[Cron] Capsule auto-expiry task started (60s interval).");
