@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS,
     },
     // Intercept the connection and physically force an IPv4 resolution
-    lookup: (hostname, options, callback) => {
+    lookup: (hostname: string, options: any, callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void) => {
         dns.lookup(hostname, { family: 4 }, (err, address, family) => {
             callback(err, address, family);
         });
@@ -20,7 +20,7 @@ const transporter = nodemailer.createTransport({
 } as any);
 
 
-const sendCapsuleAssignedNotification = async (capsule) => {
+const sendCapsuleAssignedNotification = async (capsule: any) => {
     try {
         const receiver = await User.findById(capsule.receiverId);
         if (!receiver) return;
@@ -71,7 +71,7 @@ Open your capsule directly: ${capsuleUrl}`;
             subject: title,
             html: htmlMessage,
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error sending notification:", error.message);
     }
 };

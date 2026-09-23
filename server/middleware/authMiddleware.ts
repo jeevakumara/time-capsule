@@ -1,7 +1,13 @@
+import type { Request, Response, NextFunction } from "express";
+
+interface AuthRequest extends Request {
+    user?: any;
+}
+
 const jwt = require("jsonwebtoken");
 const User = require("../models/User.js");
 
-const protect = async (req, res, next) => {
+const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -17,14 +23,14 @@ const protect = async (req, res, next) => {
         }
 
         req.user = user;
-    } catch (error) {
+    } catch (error: any) {
         return res.status(401).json({ success: false, message: "Invalid or expired token" });
     }
     next();
 };
 
-const authorize = (...allowedRoles) => {
-    return (req, res, next) => {
+const authorize = (...allowedRoles: string[]) => {
+    return (req: AuthRequest, res: Response, next: NextFunction) => {
         if (!req.user || !allowedRoles.includes(req.user.role)) {
             return res.status(403).json({ success: false, message: "Access denied for this role" });
         }

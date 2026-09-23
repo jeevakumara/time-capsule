@@ -1,6 +1,9 @@
 const express = require("express");
+import type { Request, Response } from "express";
 const cors = require("cors");
 const dotenv = require("dotenv");
+const os = require("os");
+const path = require("path");
 
 dotenv.config();
 
@@ -23,8 +26,28 @@ app.use(express.json());
 // Avatar images are now served directly from Google Cloud Storage public URLs.
 
 // -- Routes --------------------------------------------------------------------
-app.get("/api/health", (req, res) => {
+app.get("/api/health", (req: Request, res: Response) => {
     res.json({ success: true, message: "Time Capsule API is running" });
+});
+
+app.get("/api/system/diagnostics", (req: Request, res: Response) => {
+    const systemInfo = {
+        platform: os.platform(),
+        architecture: os.arch(),
+        freeMemory: os.freemem(),
+        totalMemory: os.totalmem(),
+        cpus: os.cpus().length,
+    };
+
+    const currentDirectory = __dirname;
+    const resolvedPath = path.resolve(currentDirectory, '..', 'package.json');
+    const parsedPath = path.parse(resolvedPath);
+
+    res.json({
+        success: true,
+        system: systemInfo,
+        pathing: parsedPath,
+    });
 });
 
 app.use("/api/auth", authRoutes);

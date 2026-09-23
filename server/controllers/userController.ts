@@ -1,3 +1,10 @@
+import type { Request, Response } from "express";
+
+interface AuthRequest extends Request {
+    user?: any;
+    file?: any;
+}
+
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const User = require("../models/User");
@@ -5,7 +12,7 @@ const { bufferToDataUrl } = require("../utils/gcsService");
 
 const generateTempPassword = () => crypto.randomBytes(4).toString("hex");
 
-const createUser = async (req, res) => {
+const createUser = async (req: AuthRequest, res: Response) => {
     try {
         const { name, email, employeeId, role } = req.body;
 
@@ -47,36 +54,36 @@ const createUser = async (req, res) => {
             },
             tempPassword,
         });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({ success: false, message: "Server error", error: error.message });
     }
 };
 
-const listUsers = async (req, res) => {
+const listUsers = async (req: AuthRequest, res: Response) => {
     try {
         const filter: { role?: string } = {};
         if (req.query.role) filter.role = req.query.role as string;
 
         const users = await User.find(filter).select("-passwordHash");
         res.status(200).json({ success: true, users });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({ success: false, message: "Server error", error: error.message });
     }
 };
 
-const getUserById = async (req, res) => {
+const getUserById = async (req: AuthRequest, res: Response) => {
     try {
         const user = await User.findById(req.params.id).select("-passwordHash");
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
         res.status(200).json({ success: true, user });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({ success: false, message: "Server error", error: error.message });
     }
 };
 
-const updateUserStatus = async (req, res) => {
+const updateUserStatus = async (req: AuthRequest, res: Response) => {
     try {
         const { status } = req.body;
         const user = await User.findByIdAndUpdate(
@@ -89,12 +96,12 @@ const updateUserStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: "User not found" });
         }
         res.status(200).json({ success: true, user });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({ success: false, message: "Server error", error: error.message });
     }
 };
 
-const updateUser = async (req, res) => {
+const updateUser = async (req: AuthRequest, res: Response) => {
     try {
         const { name, role } = req.body;
         const user = await User.findById(req.params.id);
@@ -132,12 +139,12 @@ const updateUser = async (req, res) => {
                 profileImage: user.profileImage,
             },
         });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({ success: false, message: "Server error", error: error.message });
     }
 };
 
-const deleteUser = async (req, res) => {
+const deleteUser = async (req: AuthRequest, res: Response) => {
     try {
         const user = await User.findById(req.params.id);
         if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -148,7 +155,7 @@ const deleteUser = async (req, res) => {
 
         await User.findByIdAndDelete(req.params.id);
         res.status(200).json({ success: true, message: "User deleted" });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({ success: false, message: "Server error", error: error.message });
     }
 };

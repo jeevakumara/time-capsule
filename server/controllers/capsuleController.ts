@@ -1,3 +1,7 @@
+import type { Request, Response } from 'express';
+
+interface AuthRequest extends Request { user?: any; file?: any; }
+
 const Capsule = require("../models/Capsule");
 const { encryptBuffer, decryptBuffer } = require("../utils/encryption");
 const { GeoSpatialService } = require("../utils/distance");
@@ -8,7 +12,7 @@ const { AppError, SecurityError } = require("../utils/errors");
 const { compress, decompress } = require("../utils/compression");
 
 // HR / Admin: create a new capsule
-const createCapsule = async (req, res) => {
+const createCapsule = async (req: AuthRequest, res: Response) => {
     try {
         const {
             title,
@@ -35,9 +39,9 @@ const createCapsule = async (req, res) => {
             });
         }
 
-        // Step 1: Compress the PDF (before encryption — encrypted data cannot be compressed)
+        // Step 1: Compress the PDF (before encryption ï¿½ encrypted data cannot be compressed)
         const compressedBuffer = await compress(req.file.buffer);
-        // Step 2: Encrypt the compressed buffer — stored in MongoDB
+        // Step 2: Encrypt the compressed buffer ï¿½ stored in MongoDB
         const encryptedFile = encryptBuffer(compressedBuffer);
 
         const capsule = await Capsule.create({
@@ -73,7 +77,7 @@ const createCapsule = async (req, res) => {
             message: "Capsule created successfully",
             capsule: capsuleData,
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error creating capsule:", error);
         res.status(500).json({
             success: false,
@@ -84,13 +88,13 @@ const createCapsule = async (req, res) => {
 };
 
 // HR / Admin: list capsules created by this sender (never return encrypted binary)
-const listCapsulesBySender = async (req, res) => {
+const listCapsulesBySender = async (req: AuthRequest, res: Response) => {
     try {
         const capsules = await Capsule.find({ senderId: req.user._id })
             .select("-encryptedFile")
             .sort({ createdAt: -1 });
         res.status(200).json({ success: true, capsules });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({
             success: false,
             message: "Server error while fetching capsules",
@@ -100,13 +104,13 @@ const listCapsulesBySender = async (req, res) => {
 };
 
 // Interviewer: list capsules assigned to this receiver (never return encrypted binary)
-const listCapsulesAssignedToReceiver = async (req, res) => {
+const listCapsulesAssignedToReceiver = async (req: AuthRequest, res: Response) => {
     try {
         const capsules = await Capsule.find({ receiverId: req.user._id })
             .select("-encryptedFile")
             .sort({ createdAt: -1 });
         res.status(200).json({ success: true, capsules });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({
             success: false,
             message: "Server error while fetching assigned capsules",
@@ -116,7 +120,7 @@ const listCapsulesAssignedToReceiver = async (req, res) => {
 };
 
 // Interviewer: secure unlock (identity + status + time + location + decryption)
-const unlockCapsule = async (req, res) => {
+const unlockCapsule = async (req: AuthRequest, res: Response) => {
     try {
         const { latitude, longitude } = req.body;
         const capsuleId = req.params.id;
@@ -228,7 +232,7 @@ const unlockCapsule = async (req, res) => {
         });
         return res.status(200).send(decryptedBuffer);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("unlockCapsule error:", error);
 
         try {
@@ -239,7 +243,7 @@ const unlockCapsule = async (req, res) => {
                 result: "FAILURE",
                 reason: error.message,
             });
-        } catch (e) {
+        } catch (e: any) {
             console.error("Error writing audit log:", e.message);
         }
 
@@ -260,7 +264,7 @@ const unlockCapsule = async (req, res) => {
 };
 
 // HR / Admin: delete a capsule (removes document including encrypted binary)
-const deleteCapsule = async (req, res) => {
+const deleteCapsule = async (req: AuthRequest, res: Response) => {
     try {
         const capsuleId = req.params.id;
         const capsule = await Capsule.findById(capsuleId).select("-encryptedFile");
@@ -291,7 +295,7 @@ const deleteCapsule = async (req, res) => {
         });
 
         res.status(200).json({ success: true, message: "Capsule deleted successfully" });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error deleting capsule:", error);
         res.status(500).json({
             success: false,

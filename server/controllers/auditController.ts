@@ -1,6 +1,7 @@
+import type { Request, Response } from 'express';
 const AuditLog = require("../models/AuditLog");
 
-const getRecentLogs = async (req, res) => {
+const getRecentLogs = async (req: Request, res: Response) => {
     try {
         const logs = await AuditLog.find({})
             .sort({ createdAt: -1 })
@@ -8,7 +9,7 @@ const getRecentLogs = async (req, res) => {
             .populate("userId", "name email role")
             .populate("capsuleId", "title");
         res.status(200).json({ success: true, logs });
-    } catch (error) {
+    } catch (error: any) {
         res.status(500).json({
             success: false,
             message: "Failed to fetch audit logs",

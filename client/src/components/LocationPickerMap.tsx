@@ -1,6 +1,21 @@
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
 
-function MapClickHandler({ onChange }) {
+// Explicit Tuple Definition
+type CoordinateTuple = [number, number];
+
+// Strict Component Prop Interfaces
+interface MapClickProps {
+    onChange: (coords: { latitude: number; longitude: number }) => void;
+}
+
+interface LocationPickerProps {
+    latitude?: number | string | null;
+    longitude?: number | string | null;
+    radiusMeters?: number | string;
+    onChange: (coords: { latitude: number; longitude: number }) => void;
+}
+
+function MapClickHandler({ onChange }: MapClickProps) {
     useMapEvents({
         click(e) {
             const { lat, lng } = e.latlng;
@@ -10,9 +25,9 @@ function MapClickHandler({ onChange }) {
     return null;
 }
 
-function LocationPickerMap({ latitude, longitude, radiusMeters, onChange }) {
-    const defaultCenter = [12.9481, 80.1397]; // MIT default center
-    const center =
+function LocationPickerMap({ latitude, longitude, radiusMeters, onChange }: LocationPickerProps) {
+    const defaultCenter: CoordinateTuple = [12.9481, 80.1397]; // MIT default center
+    const center: CoordinateTuple =
         latitude != null && longitude != null
             ? [Number(latitude), Number(longitude)]
             : defaultCenter;
