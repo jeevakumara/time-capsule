@@ -100,7 +100,7 @@ function Login() {
                             <input
                                 id="password"
                                 type="password"
-                                placeholder="••••••••"
+                                placeholder="ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required

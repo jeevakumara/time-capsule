@@ -10,7 +10,7 @@ function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
     const { user } = useAuth();
     const location = useLocation();
 
-    // Not logged in — preserve the attempted URL in location.state.returnTo
+    // Not logged in ï¿½ preserve the attempted URL in location.state.returnTo
     // so Login can redirect back after successful authentication.
     if (!user) {
         return <Navigate to="/login" state={{ returnTo: location.pathname }} replace />;

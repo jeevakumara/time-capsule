@@ -83,8 +83,8 @@ function CreateCapsule() {
                 latitude: form.latitude,
                 longitude: form.longitude,
                 radiusMeters: form.radiusMeters,
-                unlockTime: form.unlockTime,
-                expiryTime: form.expiryTime || undefined,
+                unlockTime: new Date(form.unlockTime).toISOString(),
+                expiryTime: form.expiryTime ? new Date(form.expiryTime).toISOString() : undefined,
                 file: form.file,
             });
 

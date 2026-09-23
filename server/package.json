@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "nodemon --exec tsx server.ts",
-    "build": "tsc"
+    "build": "npx rimraf dist && tsc"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +33,6 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.1",
     "multer": "^2.2.0",
-    "nodemailer": "^9.0.4"
+    "nodemailer": "^10.0.10"
   }
 }

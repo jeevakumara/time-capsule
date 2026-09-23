@@ -40,7 +40,7 @@ function App() {
                         }
                     />
 
-                    {/* Interviewer — dashboard */}
+                    {/* Interviewer ï¿½ dashboard */}
                     <Route
                         path="/interviewer"
                         element={
@@ -56,7 +56,7 @@ function App() {
                         }
                     />
 
-                    {/* Phase 5+6: deep-link target — capsule-specific view */}
+                    {/* Phase 5+6: deep-link target ï¿½ capsule-specific view */}
                     <Route
                         path="/interviewer/capsules/:id"
                         element={

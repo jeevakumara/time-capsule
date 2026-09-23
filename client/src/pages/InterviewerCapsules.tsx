@@ -36,12 +36,12 @@ function InterviewerCapsules() {
             return;
         }
 
-        setStatus("Requesting your location…");
+        setStatus("Requesting your locationï¿½");
 
         navigator.geolocation.getCurrentPosition(
             async (position) => {
                 const { latitude, longitude } = position.coords;
-                setStatus("Verifying identity, time, and location…");
+                setStatus("Verifying identity, time, and locationï¿½");
 
                 try {
                     const res = await api.post(

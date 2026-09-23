@@ -1,14 +1,24 @@
-const nodemailer = require("nodemailer");
+import nodemailer from 'nodemailer';
+import dns from 'dns';
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 
 const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
     },
-});
+    // Intercept the connection and physically force an IPv4 resolution
+    lookup: (hostname, options, callback) => {
+        dns.lookup(hostname, { family: 4 }, (err, address, family) => {
+            callback(err, address, family);
+        });
+    }
+} as any);
+
 
 const sendCapsuleAssignedNotification = async (capsule) => {
     try {
@@ -56,10 +66,9 @@ Open your capsule directly: ${capsuleUrl}`;
 
         // Send email
         await transporter.sendMail({
-            from: `"Time Capsule" <${process.env.EMAIL_USER}>`,
+            from: process.env.EMAIL_USER,
             to: receiver.email,
             subject: title,
-            text: message,
             html: htmlMessage,
         });
     } catch (error) {
