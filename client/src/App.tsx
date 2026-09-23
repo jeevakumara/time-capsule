@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardLayout from "./components/DashboardLayout";
 import Login from "./pages/Login";
@@ -10,6 +11,7 @@ import CapsuleViewer from "./pages/CapsuleViewer";
 
 function App() {
     return (
+        <ErrorBoundary>
         <AuthProvider>
             <BrowserRouter>
                 <Routes>
@@ -73,6 +75,7 @@ function App() {
                 </Routes>
             </BrowserRouter>
         </AuthProvider>
+        </ErrorBoundary>
     );
 }
 

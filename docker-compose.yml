@@ -4,10 +4,11 @@ services:
     build: ./server
     ports:
       - "5000:5000"
+    env_file:
+      - ./server/.env.example   # Unit 6: systematic env var injection from file
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=production     # Override specific keys on top of env_file
       - PORT=5000
-    # We will pass the rest of the .env variables during the actual run
     volumes:
       - ./server/uploads:/app/uploads # Persist uploads locally
 

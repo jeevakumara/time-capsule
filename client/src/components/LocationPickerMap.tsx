@@ -1,4 +1,6 @@
+import { useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from "react-leaflet";
+import type { LeafletMouseEvent } from "leaflet";
 
 // Explicit Tuple Definition
 type CoordinateTuple = [number, number];
@@ -16,12 +18,13 @@ interface LocationPickerProps {
 }
 
 function MapClickHandler({ onChange }: MapClickProps) {
-    useMapEvents({
-        click(e) {
-            const { lat, lng } = e.latlng;
-            onChange({ latitude: lat, longitude: lng });
-        },
-    });
+    // useCallback: memoize the handler so it is not recreated on every render
+    const handleMapClick = useCallback((e: LeafletMouseEvent) => {
+        const { lat, lng } = e.latlng;
+        onChange({ latitude: lat, longitude: lng });
+    }, [onChange]);
+
+    useMapEvents({ click: handleMapClick });
     return null;
 }
 

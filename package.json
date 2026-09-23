@@ -5,7 +5,10 @@
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "install-all": "npm install --prefix server && npm install --prefix client",
-    "start": "concurrently \"npm start --prefix server\" \"npm run build --prefix client\""
+    "start": "concurrently \"npm start --prefix server\" \"npm run build --prefix client\"",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
