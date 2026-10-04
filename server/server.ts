@@ -1,3 +1,5 @@
+import dns from 'dns';
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 const http = require("http");
 const fs = require("fs/promises");
 const path = require("path");
