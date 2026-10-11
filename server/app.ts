@@ -19,7 +19,28 @@ connectDB();
 const app = express();
 
 // -- Shared middleware ----------------------------------------------------------
-app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
+// Build allowed-origins list: always include local dev, Firebase hosting, Docker defaults
+// + any CLIENT_URL from the environment (comma-separated so multiple values can be passed in).
+const DEFAULT_ORIGINS = [
+    'http://localhost:5173',
+    'https://time-capsule-web-373e8.web.app',
+    'https://time-capsule-web-373e8.firebaseapp.com',
+    'http://localhost',
+    'http://localhost:80',
+];
+const envOrigins = process.env.CLIENT_URL
+    ? process.env.CLIENT_URL.split(',').map((o: string) => o.trim())
+    : [];
+const ALLOWED_ORIGINS = Array.from(new Set([...DEFAULT_ORIGINS, ...envOrigins]));
+
+app.use(cors({
+    origin: [
+        'http://localhost:5173',
+        'https://time-capsule-web-373e8.web.app', // Add your Firebase URL here
+        ...ALLOWED_ORIGINS,
+    ],
+    credentials: true,
+}));
 app.use(express.json());
 
 // NOTE: /uploads/avatars static route removed.

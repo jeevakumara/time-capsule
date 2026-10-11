@@ -20,8 +20,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem("user");
-    return stored ? JSON.parse(stored) : null;
+    const storedUser = localStorage.getItem("user");
+    let parsedUser = null;
+    if (storedUser && storedUser !== "undefined") {
+      try {
+        parsedUser = JSON.parse(storedUser);
+      } catch (error) {
+        console.error("Failed to parse user from local storage:", error);
+        localStorage.removeItem("user"); // Clear corrupted data automatically
+      }
+    }
+    return parsedUser;
   });
 
   const login = async (email: string, password: string) => {

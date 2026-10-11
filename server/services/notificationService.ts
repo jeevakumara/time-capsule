@@ -1,23 +1,45 @@
 import nodemailer from 'nodemailer';
-import dns from 'dns';
+import { Resend } from 'resend';
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 
+// Initialize both clients
+const resend = new Resend(process.env.RESEND_API_KEY);
 const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
+    service: 'gmail',
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
     },
-    // Intercept the connection and physically force an IPv4 resolution
-    lookup: (hostname: string, options: any, callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void) => {
-        dns.lookup(hostname, { family: 4 }, (err, address, family) => {
-            callback(err, address, family);
-        });
+});
+
+export const sendNotificationEmail = async (toEmail: string, subject: string, htmlContent: string) => {
+    try {
+        // Railway automatically sets NODE_ENV to 'production'
+        if (process.env.NODE_ENV === 'production') {
+            console.log('Production Environment: Sending via Resend API');
+            const data = await resend.emails.send({
+                from: 'Time Capsule <admin@nmdtravelschennai.online>',
+                to: toEmail,
+                subject: subject,
+                html: htmlContent,
+            });
+            return data;
+        } else {
+            console.log('Local Environment: Sending via Nodemailer (SMTP)');
+            const info = await transporter.sendMail({
+                from: process.env.EMAIL_USER,
+                to: toEmail,
+                subject: subject,
+                html: htmlContent,
+            });
+            return info;
+        }
+    } catch (error) {
+        console.error('Email sending failed:', error);
+        throw error;
     }
-} as any);
+};
 
 
 const sendCapsuleAssignedNotification = async (capsule: any) => {
@@ -64,16 +86,11 @@ Open your capsule directly: ${capsuleUrl}`;
             message,
         });
 
-        // Send email
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER,
-            to: receiver.email,
-            subject: title,
-            html: htmlMessage,
-        });
+        // Send email via the hybrid helper (Resend on production, Nodemailer locally)
+        await sendNotificationEmail(receiver.email, title, htmlMessage);
     } catch (error: any) {
         console.error("Error sending notification:", error.message);
     }
 };
 
-module.exports = { sendCapsuleAssignedNotification };
+module.exports = { sendCapsuleAssignedNotification, sendNotificationEmail };
